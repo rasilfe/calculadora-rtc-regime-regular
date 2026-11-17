@@ -81,8 +81,10 @@ spec:
               value: rtc.calculo.entrada
             - name: WORKER_EXCHANGE_SAIDA
               value: rtc.calculo.out
-            - name: WORKER_ROUTING_KEY_SAIDA
-              value: resultado
+            # Multiempresa: header x-cnpj conferido com a routing key nota.<CNPJ>;
+            # resultados publicados em resultado.<CNPJ>.
+            - name: WORKER_EXIGIR_ROUTING_KEY_DA_EMPRESA
+              value: "true"
             # 2 vCPU por pod: 4 consumidores, prefetch 6 (~1,5 x consumidores)
             - name: WORKER_CONCORRENCIA
               value: "4"

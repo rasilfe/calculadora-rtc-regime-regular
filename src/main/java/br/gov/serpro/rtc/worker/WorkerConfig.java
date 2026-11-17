@@ -1,12 +1,11 @@
 package br.gov.serpro.rtc.worker;
 
-import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Declarables;
-import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.ExchangeBuilder;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
+import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -31,9 +30,20 @@ import lombok.extern.slf4j.Slf4j;
 public class WorkerConfig {
 
     static final String EXCHANGE_ENTRADA = "rtc.calculo.in";
-    static final String ROUTING_KEY_ENTRADA = "nota";
+    /** Binding da fila de entrada compartilhada: aceita {@code nota.<CNPJ>} de qualquer empresa. */
+    static final String BINDING_ENTRADA = "nota.*";
     static final String EXCHANGE_DLX = "rtc.dlx";
-    static final String FILA_SAIDA = "rtc.calculo.saida";
+    /** Prefixo das filas de saída por empresa: {@code rtc.calculo.saida.<CNPJ>}. */
+    static final String PREFIXO_FILA_SAIDA = "rtc.calculo.saida.";
+    /** DLQ única das filas de saída (mensagens mantêm a routing key {@code resultado.<CNPJ>}). */
+    static final String DLQ_SAIDA = "rtc.calculo.saida.dlq";
+    /** Fila de saída só para desenvolvimento local: recebe os resultados de todas as empresas. */
+    static final String FILA_SAIDA_DEV = "rtc.calculo.saida.dev";
+
+    /** Nome da fila de saída de uma empresa. */
+    public static String filaSaidaDaEmpresa(String cnpj) {
+        return PREFIXO_FILA_SAIDA + cnpj;
+    }
 
     @Bean
     @ConditionalOnProperty(prefix = "worker", name = "habilitado", havingValue = "true", matchIfMissing = true)
@@ -67,33 +77,39 @@ public class WorkerConfig {
     @Bean
     @ConditionalOnProperty(prefix = "worker", name = "declarar-topologia", havingValue = "true")
     Declarables topologiaCalculo(WorkerProperties properties) {
-        final DirectExchange entrada = ExchangeBuilder.directExchange(EXCHANGE_ENTRADA).durable(true).build();
-        final DirectExchange saida = ExchangeBuilder.directExchange(properties.getExchangeSaida()).durable(true).build();
-        final DirectExchange dlx = ExchangeBuilder.directExchange(EXCHANGE_DLX).durable(true).build();
+        final String prefixoSaida = properties.getMultiEmpresa().getPrefixoRoutingKeySaida();
+        final TopicExchange entrada = ExchangeBuilder.topicExchange(EXCHANGE_ENTRADA).durable(true).build();
+        final TopicExchange saida = ExchangeBuilder.topicExchange(properties.getExchangeSaida()).durable(true).build();
+        final TopicExchange dlx = ExchangeBuilder.topicExchange(EXCHANGE_DLX).durable(true).build();
 
-        final Queue filaEntrada = filaQuorum(properties.getFilaEntrada(), 200_000);
-        final Queue filaSaida = filaQuorum(FILA_SAIDA, 500_000);
-        final Queue dlqEntrada = QueueBuilder.durable(properties.getFilaEntrada() + ".dlq").quorum().build();
-        final Queue dlqSaida = QueueBuilder.durable(FILA_SAIDA + ".dlq").quorum().build();
+        final String dlqEntradaNome = properties.getFilaEntrada() + ".dlq";
+        final Queue filaEntrada = filaQuorum(properties.getFilaEntrada(), 200_000, dlqEntradaNome);
+        final Queue filaSaidaDev = filaQuorum(FILA_SAIDA_DEV, 500_000, null);
+        final Queue dlqEntrada = QueueBuilder.durable(dlqEntradaNome).quorum().build();
+        final Queue dlqSaida = QueueBuilder.durable(DLQ_SAIDA).quorum().build();
 
-        final Binding bEntrada = BindingBuilder.bind(filaEntrada).to(entrada).with(ROUTING_KEY_ENTRADA);
-        final Binding bSaida = BindingBuilder.bind(filaSaida).to(saida).with(properties.getRoutingKeySaida());
-        final Binding bDlqEntrada = BindingBuilder.bind(dlqEntrada).to(dlx).with(dlqEntrada.getName());
-        final Binding bDlqSaida = BindingBuilder.bind(dlqSaida).to(dlx).with(dlqSaida.getName());
-
-        return new Declarables(entrada, saida, dlx, filaEntrada, filaSaida, dlqEntrada, dlqSaida,
-                bEntrada, bSaida, bDlqEntrada, bDlqSaida);
+        return new Declarables(entrada, saida, dlx, filaEntrada, filaSaidaDev, dlqEntrada, dlqSaida,
+                BindingBuilder.bind(filaEntrada).to(entrada).with(BINDING_ENTRADA),
+                BindingBuilder.bind(filaSaidaDev).to(saida).with(prefixoSaida + "#"),
+                BindingBuilder.bind(dlqEntrada).to(dlx).with(dlqEntradaNome),
+                BindingBuilder.bind(dlqSaida).to(dlx).with(prefixoSaida + "#"));
     }
 
-    private static Queue filaQuorum(String nome, int tamanhoMaximo) {
-        return QueueBuilder.durable(nome)
+    /**
+     * Fila quorum com DLX. Sem {@code dlqRoutingKey}, a mensagem morta mantém a routing
+     * key original (ex.: {@code resultado.<CNPJ>}).
+     */
+    private static Queue filaQuorum(String nome, int tamanhoMaximo, String dlqRoutingKey) {
+        final QueueBuilder builder = QueueBuilder.durable(nome)
                 .quorum()
                 .deadLetterExchange(EXCHANGE_DLX)
-                .deadLetterRoutingKey(nome + ".dlq")
                 .deliveryLimit(5)
                 .maxLength(tamanhoMaximo)
                 .overflow(QueueBuilder.Overflow.rejectPublish)
-                .withArgument("x-dead-letter-strategy", "at-least-once")
-                .build();
+                .withArgument("x-dead-letter-strategy", "at-least-once");
+        if (dlqRoutingKey != null) {
+            builder.deadLetterRoutingKey(dlqRoutingKey);
+        }
+        return builder.build();
     }
 }

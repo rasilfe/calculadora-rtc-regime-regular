@@ -41,8 +41,8 @@ public class RedisIdempotenciaService implements IdempotenciaService {
     }
 
     @Override
-    public Aquisicao adquirir(UUID correlationId, String hashConteudo, boolean reentrega) {
-        final String chave = chave(correlationId);
+    public Aquisicao adquirir(String cnpj, UUID correlationId, String hashConteudo, boolean reentrega) {
+        final String chave = chave(cnpj, correlationId);
         try {
             for (int tentativa = 0; tentativa < 2; tentativa++) {
                 if (Boolean.TRUE.equals(redis.opsForValue()
@@ -75,9 +75,9 @@ public class RedisIdempotenciaService implements IdempotenciaService {
     }
 
     @Override
-    public void concluir(UUID correlationId, String hashConteudo) {
+    public void concluir(String cnpj, UUID correlationId, String hashConteudo) {
         try {
-            redis.opsForValue().set(chave(correlationId), CONCLUIDA + hashConteudo, config.getRetencao());
+            redis.opsForValue().set(chave(cnpj, correlationId), CONCLUIDA + hashConteudo, config.getRetencao());
         } catch (DataAccessException e) {
             indisponivel.increment();
             log.warn("Redis indisponível; não foi possível marcar a nota {} como concluída: {}", correlationId, e.getMessage());
@@ -85,16 +85,16 @@ public class RedisIdempotenciaService implements IdempotenciaService {
     }
 
     @Override
-    public void liberar(UUID correlationId) {
+    public void liberar(String cnpj, UUID correlationId) {
         try {
-            redis.delete(chave(correlationId));
+            redis.delete(chave(cnpj, correlationId));
         } catch (DataAccessException e) {
             indisponivel.increment();
             log.warn("Redis indisponível; o lease da nota {} expira sozinho: {}", correlationId, e.getMessage());
         }
     }
 
-    private String chave(UUID correlationId) {
-        return config.getPrefixo() + correlationId;
+    private String chave(String cnpj, UUID correlationId) {
+        return config.getPrefixo() + cnpj + ":" + correlationId;
     }
 }

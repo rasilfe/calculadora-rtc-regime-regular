@@ -20,6 +20,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * Publica o {@link ResultadoNota} na Fila de Saída e só retorna depois que o
  * broker confirma a publicação (publisher confirms).
  *
+ * <p>A routing key é {@code resultado.<CNPJ>}: cada empresa só recebe os próprios
+ * resultados. Se a empresa não tiver fila de saída, a mensagem volta
+ * ({@code basic.return}) e a nota permanece na Fila de Entrada.
+ *
  * <p>As confirmações são assíncronas no canal AMQP; quem espera é apenas a thread
  * virtual do consumidor, o que é barato. Com {@code mandatory=true}, uma mensagem
  * sem fila de destino volta como {@code basic.return}, que chega antes da
@@ -42,7 +46,8 @@ public class ResultadoPublisher {
     public void publicarConfirmado(ResultadoNota resultado) {
         final Message mensagem = criarMensagem(resultado);
         final var correlacao = new CorrelationData(resultado.correlationId().toString());
-        rabbitTemplate.send(properties.getExchangeSaida(), properties.getRoutingKeySaida(), mensagem, correlacao);
+        final String routingKey = routingKeyDaEmpresa(resultado.cnpj());
+        rabbitTemplate.send(properties.getExchangeSaida(), routingKey, mensagem, correlacao);
         final CorrelationData.Confirm confirmacao;
         try {
             confirmacao = correlacao.getFuture().get(properties.getTimeoutConfirmacao().toMillis(), TimeUnit.MILLISECONDS);
@@ -57,8 +62,16 @@ public class ResultadoPublisher {
         }
         if (correlacao.getReturned() != null) {
             throw new PublicacaoFalhouException("Mensagem devolvida pelo broker (sem fila para a routing key '"
-                    + properties.getRoutingKeySaida() + "'): " + correlacao.getReturned().getReplyText(), null);
+                    + routingKey + "'; a empresa tem fila de saída?): " + correlacao.getReturned().getReplyText(), null);
         }
+    }
+
+    /** {@code resultado.<CNPJ>}: só a fila de saída da empresa recebe o resultado. */
+    String routingKeyDaEmpresa(String cnpj) {
+        if (cnpj == null || cnpj.isBlank()) {
+            throw new IllegalStateException("Resultado sem CNPJ: não há como rotear para a fila da empresa");
+        }
+        return properties.getMultiEmpresa().getPrefixoRoutingKeySaida() + cnpj;
     }
 
     private Message criarMensagem(ResultadoNota resultado) {
@@ -74,6 +87,7 @@ public class ResultadoPublisher {
         props.setDeliveryMode(MessageDeliveryMode.PERSISTENT);
         props.setMessageId(resultado.correlationId().toString());
         props.setCorrelationId(resultado.correlationId().toString());
+        props.setHeader(properties.getMultiEmpresa().getHeaderCnpj(), resultado.cnpj());
         props.setHeader("x-id-nota", resultado.idNota());
         props.setHeader("x-status", resultado.status().name());
         props.setHeader("x-versao-base", resultado.versaoBase());

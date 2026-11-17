@@ -20,6 +20,7 @@ import br.gov.serpro.rtc.api.model.roc.ObservabilidadeROCDomain;
  *
  * @param schemaVersion       versão do contrato do envelope
  * @param correlationId       identificador da mensagem de entrada
+ * @param cnpj                CNPJ da empresa dona da nota (define a fila de saída)
  * @param idNota              chave natural da nota
  * @param loteId              rodada à qual a nota pertence
  * @param status              situação consolidada da nota
@@ -35,6 +36,7 @@ import br.gov.serpro.rtc.api.model.roc.ObservabilidadeROCDomain;
 public record ResultadoNota(
         String schemaVersion,
         UUID correlationId,
+        String cnpj,
         String idNota,
         String loteId,
         StatusNota status,

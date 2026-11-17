@@ -14,17 +14,17 @@ import org.springframework.stereotype.Service;
 public class SemIdempotenciaService implements IdempotenciaService {
 
     @Override
-    public Aquisicao adquirir(UUID correlationId, String hashConteudo, boolean reentrega) {
+    public Aquisicao adquirir(String cnpj, UUID correlationId, String hashConteudo, boolean reentrega) {
         return Aquisicao.ADQUIRIDA;
     }
 
     @Override
-    public void concluir(UUID correlationId, String hashConteudo) {
+    public void concluir(String cnpj, UUID correlationId, String hashConteudo) {
         // nada a registrar
     }
 
     @Override
-    public void liberar(UUID correlationId) {
+    public void liberar(String cnpj, UUID correlationId) {
         // nada a liberar
     }
 }

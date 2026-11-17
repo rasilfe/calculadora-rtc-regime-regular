@@ -1,0 +1,90 @@
+# Recursos de UMA empresa no pipeline (não aplique este arquivo diretamente).
+# Gere com:  ./k8s/empresas/gerar-empresa.sh <CNPJ> | kubectl apply -f -
+#
+#   __CNPJ__  CNPJ canônico (14 caracteres, maiúsculas, sem pontuação)
+#   __cnpj__  o mesmo CNPJ em minúsculas (nomes de objetos do Kubernetes)
+#
+# Isolamento:
+#   - a empresa só publica em rtc.calculo.in com routing key nota.__CNPJ__ (TopicPermission);
+#   - o worker confere o header x-cnpj com essa routing key;
+#   - a empresa só lê a própria fila de saída rtc.calculo.saida.__CNPJ__.
+# O Topology Operator gera o Secret "emp-__cnpj__-user-credentials" (username/password),
+# que deve ser entregue à empresa.
+apiVersion: rabbitmq.com/v1beta1
+kind: User
+metadata:
+  name: emp-__cnpj__
+  namespace: rtc
+  labels:
+    rtc.serpro.gov.br/cnpj: "__cnpj__"
+spec:
+  tags: []
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Permission
+metadata:
+  name: emp-__cnpj__
+  namespace: rtc
+  labels:
+    rtc.serpro.gov.br/cnpj: "__cnpj__"
+spec:
+  vhost: rtc
+  userReference:
+    name: emp-__cnpj__
+  permissions:
+    configure: "^$"
+    write: "^rtc\\.calculo\\.in$"
+    read: "^rtc\\.calculo\\.saida\\.__CNPJ__$"
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: TopicPermission
+metadata:
+  name: emp-__cnpj__
+  namespace: rtc
+  labels:
+    rtc.serpro.gov.br/cnpj: "__cnpj__"
+spec:
+  vhost: rtc
+  userReference:
+    name: emp-__cnpj__
+  permissions:
+    exchange: rtc.calculo.in
+    write: "^nota\\.__CNPJ__$"
+    read: "^$"
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Queue
+metadata:
+  name: rtc-calculo-saida-__cnpj__
+  namespace: rtc
+  labels:
+    rtc.serpro.gov.br/cnpj: "__cnpj__"
+spec:
+  name: rtc.calculo.saida.__CNPJ__
+  vhost: rtc
+  type: quorum
+  durable: true
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Binding
+metadata:
+  name: rtc-calculo-saida-__cnpj__
+  namespace: rtc
+  labels:
+    rtc.serpro.gov.br/cnpj: "__cnpj__"
+spec:
+  vhost: rtc
+  source: rtc.calculo.out
+  destination: rtc.calculo.saida.__CNPJ__
+  destinationType: queue
+  routingKey: resultado.__CNPJ__
+  rabbitmqClusterReference:
+    name: rtc-rabbit

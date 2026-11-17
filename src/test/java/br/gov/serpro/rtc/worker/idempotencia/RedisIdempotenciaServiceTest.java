@@ -26,6 +26,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 class RedisIdempotenciaServiceTest {
 
     private static final String HASH = "abc123";
+    private static final String CNPJ = "11222333000181";
 
     private StringRedisTemplate redis;
     private ValueOperations<String, String> valores;
@@ -43,14 +44,14 @@ class RedisIdempotenciaServiceTest {
         registry = new SimpleMeterRegistry();
         final var props = new WorkerProperties();
         servico = new RedisIdempotenciaService(redis, props, registry);
-        chave = props.getIdempotencia().getPrefixo() + id;
+        chave = props.getIdempotencia().getPrefixo() + CNPJ + ":" + id;
     }
 
     @Test
     void adquireQuandoChaveNaoExiste() {
         when(valores.setIfAbsent(eq(chave), eq("P|" + HASH), any(Duration.class))).thenReturn(true);
 
-        assertThat(servico.adquirir(id, HASH, false)).isEqualTo(Aquisicao.ADQUIRIDA);
+        assertThat(servico.adquirir(CNPJ, id, HASH, false)).isEqualTo(Aquisicao.ADQUIRIDA);
     }
 
     @Test
@@ -58,7 +59,7 @@ class RedisIdempotenciaServiceTest {
         when(valores.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(false);
         when(valores.get(chave)).thenReturn("C|" + HASH);
 
-        assertThat(servico.adquirir(id, HASH, true)).isEqualTo(Aquisicao.JA_CONCLUIDA);
+        assertThat(servico.adquirir(CNPJ, id, HASH, true)).isEqualTo(Aquisicao.JA_CONCLUIDA);
     }
 
     @Test
@@ -66,7 +67,7 @@ class RedisIdempotenciaServiceTest {
         when(valores.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(false);
         when(valores.get(chave)).thenReturn("C|outro-hash");
 
-        assertThat(servico.adquirir(id, HASH, false)).isEqualTo(Aquisicao.CONFLITO);
+        assertThat(servico.adquirir(CNPJ, id, HASH, false)).isEqualTo(Aquisicao.CONFLITO);
     }
 
     @Test
@@ -74,7 +75,7 @@ class RedisIdempotenciaServiceTest {
         when(valores.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(false);
         when(valores.get(chave)).thenReturn("P|" + HASH);
 
-        assertThat(servico.adquirir(id, HASH, false)).isEqualTo(Aquisicao.EM_ANDAMENTO);
+        assertThat(servico.adquirir(CNPJ, id, HASH, false)).isEqualTo(Aquisicao.EM_ANDAMENTO);
         verify(valores, never()).set(anyString(), anyString(), any(Duration.class));
     }
 
@@ -83,7 +84,7 @@ class RedisIdempotenciaServiceTest {
         when(valores.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(false);
         when(valores.get(chave)).thenReturn("P|" + HASH);
 
-        assertThat(servico.adquirir(id, HASH, true)).isEqualTo(Aquisicao.ADQUIRIDA);
+        assertThat(servico.adquirir(CNPJ, id, HASH, true)).isEqualTo(Aquisicao.ADQUIRIDA);
         verify(valores).set(eq(chave), eq("P|" + HASH), any(Duration.class));
     }
 
@@ -92,7 +93,7 @@ class RedisIdempotenciaServiceTest {
         when(valores.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(false, true);
         when(valores.get(chave)).thenReturn(null);
 
-        assertThat(servico.adquirir(id, HASH, false)).isEqualTo(Aquisicao.ADQUIRIDA);
+        assertThat(servico.adquirir(CNPJ, id, HASH, false)).isEqualTo(Aquisicao.ADQUIRIDA);
     }
 
     @Test
@@ -100,13 +101,24 @@ class RedisIdempotenciaServiceTest {
         when(valores.setIfAbsent(anyString(), anyString(), any(Duration.class)))
                 .thenThrow(new RedisConnectionFailureException("fora do ar"));
 
-        assertThat(servico.adquirir(id, HASH, false)).isEqualTo(Aquisicao.ADQUIRIDA);
+        assertThat(servico.adquirir(CNPJ, id, HASH, false)).isEqualTo(Aquisicao.ADQUIRIDA);
         assertThat(registry.counter("rtc.worker.idempotencia.indisponivel").count()).isEqualTo(1);
     }
 
     @Test
+    void mesmoCorrelationIdEmEmpresasDiferentesUsaChavesDiferentes() {
+        when(valores.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(true);
+
+        servico.adquirir(CNPJ, id, HASH, false);
+        servico.adquirir("12ABC34501DE35", id, HASH, false);
+
+        verify(valores).setIfAbsent(eq("rtc:nota:" + CNPJ + ":" + id), anyString(), any(Duration.class));
+        verify(valores).setIfAbsent(eq("rtc:nota:12ABC34501DE35:" + id), anyString(), any(Duration.class));
+    }
+
+    @Test
     void concluirGravaMarcaComRetencao() {
-        servico.concluir(id, HASH);
+        servico.concluir(CNPJ, id, HASH);
 
         verify(valores).set(chave, "C|" + HASH, Duration.ofDays(2));
     }
@@ -118,8 +130,8 @@ class RedisIdempotenciaServiceTest {
                 .when(valores).set(anyString(), anyString(), any(Duration.class));
 
         assertThatCode(() -> {
-            servico.concluir(id, HASH);
-            servico.liberar(id);
+            servico.concluir(CNPJ, id, HASH);
+            servico.liberar(CNPJ, id);
         }).doesNotThrowAnyException();
         assertThat(registry.counter("rtc.worker.idempotencia.indisponivel").count()).isEqualTo(2);
     }

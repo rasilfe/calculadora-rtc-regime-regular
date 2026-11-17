@@ -318,10 +318,16 @@ worker:
   habilitado: ${WORKER_HABILITADO:true}
   fila-entrada: ${WORKER_FILA_ENTRADA:rtc.calculo.entrada}
   exchange-saida: ${WORKER_EXCHANGE_SAIDA:rtc.calculo.out}
-  routing-key-saida: ${WORKER_ROUTING_KEY_SAIDA:resultado}
   timeout-confirmacao: 10s
   declarar-topologia: ${WORKER_DECLARAR_TOPOLOGIA:false}
   reprocessar-falha-tecnica: true
+  # Fila de entrada compartilhada entre empresas; a empresa vem do header x-cnpj,
+  # conferido com a routing key nota.<CNPJ>. Resultados saem em resultado.<CNPJ>.
+  multi-empresa:
+    header-cnpj: x-cnpj
+    prefixo-routing-key-entrada: "nota."
+    prefixo-routing-key-saida: "resultado."
+    exigir-routing-key-da-empresa: ${WORKER_EXIGIR_ROUTING_KEY_DA_EMPRESA:true}
   idempotencia:
     tipo: ${WORKER_IDEMPOTENCIA:redis}
     lease: 5m

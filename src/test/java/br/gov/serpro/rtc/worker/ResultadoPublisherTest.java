@@ -33,7 +33,7 @@ class ResultadoPublisherTest {
     private RabbitTemplate template;
     private WorkerProperties properties;
     private ResultadoPublisher publisher;
-    private final ResultadoNota resultado = new ResultadoNota("1", UUID.randomUUID(), "nota-1", "lote-1",
+    private final ResultadoNota resultado = new ResultadoNota("1", UUID.randomUUID(), "12ABC34501DE35", "nota-1", "lote-1",
             StatusNota.SUCESSO, "1.6.1", "V0059", null, null, 3, null, null);
 
     @BeforeEach
@@ -51,13 +51,14 @@ class ResultadoPublisherTest {
         assertThatCode(() -> publisher.publicarConfirmado(resultado)).doesNotThrowAnyException();
 
         final var captor = ArgumentCaptor.forClass(Message.class);
-        verify(template).send(eq("rtc.calculo.out"), eq("resultado"), captor.capture(), any(CorrelationData.class));
+        verify(template).send(eq("rtc.calculo.out"), eq("resultado.12ABC34501DE35"), captor.capture(), any(CorrelationData.class));
         final MessageProperties props = captor.getValue().getMessageProperties();
         assertThat(props.getMessageId()).isEqualTo(resultado.correlationId().toString());
         assertThat(props.getCorrelationId()).isEqualTo(resultado.correlationId().toString());
         assertThat(props.getDeliveryMode()).isEqualTo(MessageDeliveryMode.PERSISTENT);
         assertThat(props.getContentType()).isEqualTo(MessageProperties.CONTENT_TYPE_JSON);
         assertThat((String) props.getHeader("x-status")).isEqualTo("SUCESSO");
+        assertThat((String) props.getHeader("x-cnpj")).isEqualTo("12ABC34501DE35");
         assertThat(new String(captor.getValue().getBody())).contains("\"idNota\":\"nota-1\"");
     }
 
@@ -89,6 +90,15 @@ class ResultadoPublisherTest {
         assertThatThrownBy(() -> publisher.publicarConfirmado(resultado))
                 .isInstanceOf(ResultadoPublisher.PublicacaoFalhouException.class)
                 .hasMessageContaining("Sem confirmação");
+    }
+
+    @Test
+    void resultadoSemCnpjNaoEhPublicado() {
+        final var semEmpresa = new ResultadoNota("1", UUID.randomUUID(), null, "nota-1", "lote-1",
+                StatusNota.SUCESSO, "1.6.1", "V0059", null, null, 3, null, null);
+
+        assertThatThrownBy(() -> publisher.publicarConfirmado(semEmpresa)).isInstanceOf(IllegalStateException.class);
+        org.mockito.Mockito.verifyNoInteractions(template);
     }
 
     private void aoEnviar(Consumer<CorrelationData> broker) {

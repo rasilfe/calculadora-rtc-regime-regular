@@ -1,8 +1,12 @@
 # Topologia do pipeline de cálculo (Messaging Topology Operator).
 #
-#   produtor --(nota)--> rtc.calculo.in --> rtc.calculo.entrada --> worker
-#   worker --(resultado)--> rtc.calculo.out --> rtc.calculo.saida --> consumidor
+#   empresa --(nota.<CNPJ>)--> rtc.calculo.in --(nota.*)--> rtc.calculo.entrada --> worker
+#   worker --(resultado.<CNPJ>)--> rtc.calculo.out --> rtc.calculo.saida.<CNPJ> --> empresa
 #   falhas repetidas / mensagens ilegíveis --> rtc.dlx --> *.dlq
+#
+# A fila de entrada é compartilhada; a de saída é uma por empresa (k8s/empresas).
+# Exchanges topic permitem que a topic permission de cada empresa restrinja a routing
+# key de publicação ao próprio CNPJ.
 #
 # Limites, DLX e delivery-limit ficam em Policies (podem ser alterados sem recriar
 # as filas); só o tipo quorum é argumento fixo da fila.
@@ -26,7 +30,7 @@ metadata:
 spec:
   name: rtc.calculo.in
   vhost: rtc
-  type: direct
+  type: topic
   durable: true
   rabbitmqClusterReference:
     name: rtc-rabbit
@@ -39,7 +43,7 @@ metadata:
 spec:
   name: rtc.calculo.out
   vhost: rtc
-  type: direct
+  type: topic
   durable: true
   rabbitmqClusterReference:
     name: rtc-rabbit
@@ -52,7 +56,7 @@ metadata:
 spec:
   name: rtc.dlx
   vhost: rtc
-  type: direct
+  type: topic
   durable: true
   rabbitmqClusterReference:
     name: rtc-rabbit
@@ -65,19 +69,6 @@ metadata:
   namespace: rtc
 spec:
   name: rtc.calculo.entrada
-  vhost: rtc
-  type: quorum
-  durable: true
-  rabbitmqClusterReference:
-    name: rtc-rabbit
----
-apiVersion: rabbitmq.com/v1beta1
-kind: Queue
-metadata:
-  name: rtc-calculo-saida
-  namespace: rtc
-spec:
-  name: rtc.calculo.saida
   vhost: rtc
   type: quorum
   durable: true
@@ -121,21 +112,7 @@ spec:
   source: rtc.calculo.in
   destination: rtc.calculo.entrada
   destinationType: queue
-  routingKey: nota
-  rabbitmqClusterReference:
-    name: rtc-rabbit
----
-apiVersion: rabbitmq.com/v1beta1
-kind: Binding
-metadata:
-  name: rtc-calculo-saida
-  namespace: rtc
-spec:
-  vhost: rtc
-  source: rtc.calculo.out
-  destination: rtc.calculo.saida
-  destinationType: queue
-  routingKey: resultado
+  routingKey: "nota.*"            # nota.<CNPJ> de qualquer empresa
   rabbitmqClusterReference:
     name: rtc-rabbit
 ---
@@ -163,7 +140,7 @@ spec:
   source: rtc.dlx
   destination: rtc.calculo.saida.dlq
   destinationType: queue
-  routingKey: rtc.calculo.saida.dlq
+  routingKey: "resultado.#"       # mensagens mortas mantêm resultado.<CNPJ>
   rabbitmqClusterReference:
     name: rtc-rabbit
 ---
@@ -192,20 +169,21 @@ spec:
 apiVersion: rabbitmq.com/v1beta1
 kind: Policy
 metadata:
-  name: rtc-calculo-saida
+  name: rtc-calculo-saida-empresas
   namespace: rtc
 spec:
-  name: rtc-calculo-saida
+  name: rtc-calculo-saida-empresas
   vhost: rtc
-  pattern: "^rtc\\.calculo\\.saida$"
+  # Filas de saída por empresa: rtc.calculo.saida.<CNPJ> (numérico ou alfanumérico)
+  pattern: "^rtc\\.calculo\\.saida\\.[0-9A-Z]{12}[0-9]{2}$"
   applyTo: queues
   priority: 10
   definition:
     dead-letter-exchange: rtc.dlx
-    dead-letter-routing-key: rtc.calculo.saida.dlq
+    # sem dead-letter-routing-key: a mensagem morta mantém resultado.<CNPJ>
     dead-letter-strategy: at-least-once
-    overflow: reject-publish
-    max-length: 500000                    # folga maior: consumidor lento não deve travar o worker
+    overflow: reject-publish              # fila cheia recusa: a nota fica na entrada até a empresa consumir
+    max-length: 100000                    # por empresa
     delivery-limit: 5
   rabbitmqClusterReference:
     name: rtc-rabbit
@@ -235,58 +213,6 @@ spec:
     configure: "^$"                          # topologia é do operador
     write: "^rtc\\.calculo\\.out$"
     read: "^rtc\\.calculo\\.entrada$"
-  rabbitmqClusterReference:
-    name: rtc-rabbit
----
-apiVersion: rabbitmq.com/v1beta1
-kind: User
-metadata:
-  name: rtc-produtor
-  namespace: rtc
-spec:
-  tags: []
-  rabbitmqClusterReference:
-    name: rtc-rabbit
----
-apiVersion: rabbitmq.com/v1beta1
-kind: Permission
-metadata:
-  name: rtc-produtor
-  namespace: rtc
-spec:
-  vhost: rtc
-  userReference:
-    name: rtc-produtor
-  permissions:
-    configure: "^$"
-    write: "^rtc\\.calculo\\.in$"
-    read: "^$"
-  rabbitmqClusterReference:
-    name: rtc-rabbit
----
-apiVersion: rabbitmq.com/v1beta1
-kind: User
-metadata:
-  name: rtc-consumidor
-  namespace: rtc
-spec:
-  tags: []
-  rabbitmqClusterReference:
-    name: rtc-rabbit
----
-apiVersion: rabbitmq.com/v1beta1
-kind: Permission
-metadata:
-  name: rtc-consumidor
-  namespace: rtc
-spec:
-  vhost: rtc
-  userReference:
-    name: rtc-consumidor
-  permissions:
-    configure: "^$"
-    write: "^$"
-    read: "^rtc\\.calculo\\.saida$"
   rabbitmqClusterReference:
     name: rtc-rabbit
 ---

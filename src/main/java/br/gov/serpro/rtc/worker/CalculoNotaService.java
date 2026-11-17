@@ -62,13 +62,13 @@ public class CalculoNotaService {
         try {
             final ObservabilidadeROCDomain resultado = observabilidadeService.processarOperacao(operacao, baseUrlErros);
             final TipoWarningDadosSimulados aviso = avisoDadosSimuladosService.getWarningDadosSimulados(operacao);
-            return new ResultadoNota(ResultadoNota.SCHEMA_VERSION, nota.correlationId(), nota.idNota(), nota.loteId(),
+            return new ResultadoNota(ResultadoNota.SCHEMA_VERSION, nota.correlationId(), nota.cnpj(), nota.idNota(), nota.loteId(),
                     statusDe(resultado.getObjetos()), versaoApp, versaoBase,
                     aviso != null ? aviso.getValor() : null,
                     agora(), duracaoMs(inicio), null, resultado);
         } catch (ErrosCalculoException e) {
             log.debug("Nota {} ({}) rejeitada antes do cálculo dos itens: {}", nota.idNota(), nota.correlationId(), e.getErros());
-            return new ResultadoNota(ResultadoNota.SCHEMA_VERSION, nota.correlationId(), nota.idNota(), nota.loteId(),
+            return new ResultadoNota(ResultadoNota.SCHEMA_VERSION, nota.correlationId(), nota.cnpj(), nota.idNota(), nota.loteId(),
                     StatusNota.ERRO, versaoApp, versaoBase, null,
                     agora(), duracaoMs(inicio), e.getErros(), null);
         }

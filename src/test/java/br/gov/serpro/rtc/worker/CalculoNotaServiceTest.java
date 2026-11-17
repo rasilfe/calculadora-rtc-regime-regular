@@ -115,6 +115,6 @@ class CalculoNotaServiceTest {
     private NotaEntrada nota(Resource resource) throws IOException {
         final var operacao = objectMapper.readValue(StreamUtils.copyToString(resource.getInputStream(), UTF_8),
                 OperacaoInput.class);
-        return new NotaEntrada("1", UUID.randomUUID(), "nota-1", "lote-1", OffsetDateTime.now(), operacao);
+        return new NotaEntrada("1", UUID.randomUUID(), "11222333000181", "nota-1", "lote-1", OffsetDateTime.now(), operacao);
     }
 }

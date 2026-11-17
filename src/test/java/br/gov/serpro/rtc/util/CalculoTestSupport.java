@@ -58,7 +58,7 @@ public class CalculoTestSupport {
     public ResultadoNota calcularNota(String jsonOperacao) throws JsonProcessingException {
         final OperacaoInput operacao = objectMapper.readValue(jsonOperacao, OperacaoInput.class);
         return calculoNotaService.calcular(
-                new NotaEntrada("1", UUID.randomUUID(), "nota-teste", "lote-teste", OffsetDateTime.now(), operacao));
+                new NotaEntrada("1", UUID.randomUUID(), "11222333000181", "nota-teste", "lote-teste", OffsetDateTime.now(), operacao));
     }
 
     /** Calcula a nota pelo caminho do worker e devolve o envelope serializado em JSON. */

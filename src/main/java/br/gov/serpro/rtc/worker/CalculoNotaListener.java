@@ -16,6 +16,7 @@ import com.rabbitmq.client.Channel;
 
 import br.gov.serpro.rtc.api.model.roc.ObservabilidadeItemDomain;
 import br.gov.serpro.rtc.domain.model.enumeration.EstadoItemEnum;
+import br.gov.serpro.rtc.worker.empresa.IdentificacaoEmpresa;
 import br.gov.serpro.rtc.worker.idempotencia.IdempotenciaService;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
@@ -27,6 +28,8 @@ import lombok.extern.slf4j.Slf4j;
  * <p>Fluxo, com ack manual:
  * <ol>
  * <li>converte o JSON; mensagem ilegível vai direto para a DLQ ({@code basicReject} sem requeue);</li>
+ * <li>identifica a empresa (header {@code x-cnpj} conferido com a routing key
+ * {@code nota.<CNPJ>}); sem empresa válida, vai para a DLQ;</li>
  * <li>verifica a idempotência pelo {@code correlationId};</li>
  * <li>calcula a nota ({@link CalculoNotaService}); erros de negócio por item fazem parte do resultado;</li>
  * <li>publica o resultado e espera a confirmação do broker;</li>
@@ -72,17 +75,28 @@ public class CalculoNotaListener {
         final long tag = mensagem.getMessageProperties().getDeliveryTag();
         final boolean reentrega = Boolean.TRUE.equals(mensagem.getMessageProperties().isRedelivered());
 
-        final NotaEntrada nota = ler(mensagem);
-        if (nota == null) {
+        final NotaEntrada lida = ler(mensagem);
+        if (lida == null) {
             contar("rejeitada_ilegivel");
             canal.basicReject(tag, false);
             return;
         }
+        final var empresa = IdentificacaoEmpresa.identificar(mensagem.getMessageProperties(), lida.cnpj(),
+                properties.getMultiEmpresa());
+        if (!empresa.identificada()) {
+            log.error("Nota {} sem empresa válida; enviando para a DLQ: {}", lida.correlationId(), empresa.motivoRecusa());
+            contar("rejeitada_empresa");
+            canal.basicReject(tag, false);
+            return;
+        }
+        final String cnpj = empresa.cnpj().valor();
+        final NotaEntrada nota = lida.comCnpj(cnpj);
 
-        try (var mdcCorrelacao = MDC.putCloseable("correlationId", nota.correlationId().toString());
+        try (var mdcEmpresa = MDC.putCloseable("cnpj", cnpj);
+                var mdcCorrelacao = MDC.putCloseable("correlationId", nota.correlationId().toString());
                 var mdcNota = MDC.putCloseable("idNota", nota.idNota())) {
             final String hash = sha256(mensagem.getBody());
-            switch (idempotencia.adquirir(nota.correlationId(), hash, reentrega)) {
+            switch (idempotencia.adquirir(cnpj, nota.correlationId(), hash, reentrega)) {
                 case JA_CONCLUIDA -> {
                     log.info("Nota já processada; confirmando sem recalcular");
                     contar("duplicada_concluida");
@@ -111,7 +125,7 @@ public class CalculoNotaListener {
                     throw new FalhaTecnicaException();
                 }
                 publisher.publicarConfirmado(resultado);
-                idempotencia.concluir(nota.correlationId(), hash);
+                idempotencia.concluir(cnpj, nota.correlationId(), hash);
                 canal.basicAck(tag, false);
                 amostra.stop(duracao);
                 registry.counter("rtc.worker.notas", "resultado", "publicada", "status", resultado.status().name())
@@ -120,7 +134,7 @@ public class CalculoNotaListener {
                 log.warn("Falha transitória ao processar a nota (reentrega={}); devolvendo para a fila: {}",
                         reentrega, e.toString());
                 contar("devolvida_fila");
-                idempotencia.liberar(nota.correlationId());
+                idempotencia.liberar(cnpj, nota.correlationId());
                 canal.basicNack(tag, false, true);
             }
         }
