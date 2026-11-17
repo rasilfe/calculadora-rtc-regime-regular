@@ -17,6 +17,7 @@
 		<surefire.excludedGroups>benchmark</surefire.excludedGroups>
 		<swagger-annotations.version>2.2.30</swagger-annotations.version>
 		<embedded-postgres.version>2.1.0</embedded-postgres.version>
+		<rabbitmq-mock.version>1.2.0</rabbitmq-mock.version>
 		<jacoco.version>0.8.14</jacoco.version>
 		<modelmapper.version>3.2.5</modelmapper.version>
 		<commons-jexl3.version>3.5.0</commons-jexl3.version>
@@ -119,6 +120,15 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+		<!-- Broker AMQP em memória (implementa a API do cliente Java do RabbitMQ) para o
+		     teste ponta a ponta do worker, sem Docker. Recursos exclusivos do servidor
+		     RabbitMQ (quorum, topic permission, delivery-limit) são validados pelos manifestos. -->
+		<dependency>
+			<groupId>com.github.fridujo</groupId>
+			<artifactId>rabbitmq-mock</artifactId>
+			<version>${rabbitmq-mock.version}</version>
 			<scope>test</scope>
 		</dependency>
 		<!-- PostgreSQL embarcado para os testes (sem Docker). -->

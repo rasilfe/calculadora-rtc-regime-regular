@@ -70,7 +70,7 @@ public class CalculoNotaListener {
                 .register(registry);
     }
 
-    @RabbitListener(id = ID_CONTAINER, queues = "${worker.fila-entrada}", ackMode = "MANUAL")
+    @RabbitListener(id = ID_CONTAINER, queues = "${worker.fila-entrada:rtc.calculo.entrada}", ackMode = "MANUAL")
     public void receber(Message mensagem, Channel canal) throws IOException {
         final long tag = mensagem.getMessageProperties().getDeliveryTag();
         final boolean reentrega = Boolean.TRUE.equals(mensagem.getMessageProperties().isRedelivered());
