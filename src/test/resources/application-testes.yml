@@ -1,7 +1,7 @@
 application:
   module: api-regime-geral
   db:
-    filename: calculadora-pro.db
+    name: calculadora_nonpro
   ibs:
     enabled: true
   memoriacalculo:
@@ -13,22 +13,16 @@ spring:
   config:
     activate:
       on-profile: testes
-  datasource:
-    url: jdbc:sqlite:file:./calculadora/db/${application.db.filename}?mode=ro&date_class=TEXT&date_string_format=yyyy-MM-dd
-    username: sa
-    password: 
-    driverClassName: org.sqlite.JDBC
+  # O DataSource dos testes vem do PostgreSQL embarcado (PostgresEmbarcadoTestConfig).
   jpa:
-    database-platform: org.hibernate.community.dialect.SQLiteDialect
-    defer-datasource-initialization: true
     open-in-view: false
     show-sql: false
     properties:
       hibernate:
         "[format_sql]": false
-  sql:
-    init:
-      mode: embedded
+  flyway:
+    enabled: true
+    locations: classpath:db/postgres
   task:
     execution:
       pool:
@@ -76,34 +70,10 @@ logging:
         serpro:
           rtc: INFO
           
+# Sem API HTTP de negócio: o servidor embutido existe apenas para o Actuator
+# (probes de liveness/readiness e métricas Prometheus).
 server:
-  port: 8080
-  servlet:
-    context-path: /api
-  tomcat:
-    use-relative-redirects: true
-    threads:
-      max: 250
-  compression:
-    enabled: true
-    mime-types: application/json
-    min-response-size: 1024
-    
-springdoc:
-  version: '@springdoc.version@'
-  api-docs:
-    path: /api-docs
-    version: openapi-3-1
-  swagger-ui:
-    layout: BaseLayout
-    display-request-duration: true
-    groups-order: DESC
-    operationsSorter: method
-    disable-swagger-default-url: true
-    use-root-path: true
-  show-actuator: false
-  cache:
-    disabled: true
+  port: ${MANAGEMENT_PORT:9101}
 
 cache:
   specs:
@@ -211,6 +181,10 @@ cache:
       expireAfterAccess: "P1D"
       initialCapacity: 240 # ~30KB
       maximumSize: 240
+    - name: SituacaoTributariaRepository.consultarSituacaoTributariaPorCodigo
+      expireAfterAccess: "P1D"
+      initialCapacity: 240 # chave: CST + tributo + data
+      maximumSize: 2_000
     - name: TratamentoClassificacaoRepository.buscarTratamentoClassificacao
       expireAfterAccess: "P1D"
       initialCapacity: 400 # ~50KB
@@ -273,8 +247,6 @@ cache:
       maximumSize: 1
     
 management:
-  server:
-    port: 9101
   endpoints:
     web:
       exposure:

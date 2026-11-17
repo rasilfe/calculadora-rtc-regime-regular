@@ -45,7 +45,7 @@ public interface GrupoAtorRepository extends JpaRepository<GrupoAtor, Long> {
               AND g.GRAT_INICIO_VIGENCIA <= :data
               AND (g.GRAT_FIM_VIGENCIA IS NULL OR g.GRAT_FIM_VIGENCIA >= :data)
               AND (
-                  :papel IS NULL
+                  CAST(:papel AS text) IS NULL
                   OR EXISTS (
                       SELECT 1 FROM ATOR_CLASSIFICACAO ac
                       WHERE ac.ATCL_ATOR_ID = a.ATOR_ID

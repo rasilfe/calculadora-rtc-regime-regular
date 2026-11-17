@@ -99,7 +99,7 @@ public interface ClassificacaoTributariaRepository extends JpaRepository<Classif
             SELECT ct.CLTR_CD
             FROM CLASSIFICACAO_TRIBUTARIA ct
             WHERE :data BETWEEN ct.CLTR_INICIO_VIGENCIA AND COALESCE(ct.CLTR_FIM_VIGENCIA, :data)
-            AND ( :fornecedor IS NULL
+            AND ( CAST(:fornecedor AS integer) IS NULL
                   OR NOT EXISTS (SELECT 1 FROM ATOR_CLASSIFICACAO ac
                                   WHERE ac.ATCL_CLTR_ID = ct.CLTR_ID
                                     AND ac.ATCL_IN_PAPEL = 'Fornecedor'
@@ -111,7 +111,7 @@ public interface ClassificacaoTributariaRepository extends JpaRepository<Classif
                                 AND ac.ATCL_ATOR_ID = :fornecedor
                                 AND :data BETWEEN ac.ATCL_INICIO_VIGENCIA
                                               AND COALESCE(ac.ATCL_FIM_VIGENCIA, :data)) )
-            AND ( :adquirente IS NULL
+            AND ( CAST(:adquirente AS integer) IS NULL
                   OR NOT EXISTS (SELECT 1 FROM ATOR_CLASSIFICACAO ac
                                   WHERE ac.ATCL_CLTR_ID = ct.CLTR_ID
                                     AND ac.ATCL_IN_PAPEL = 'Adquirente'
@@ -123,7 +123,7 @@ public interface ClassificacaoTributariaRepository extends JpaRepository<Classif
                                 AND ac.ATCL_ATOR_ID = :adquirente
                                 AND :data BETWEEN ac.ATCL_INICIO_VIGENCIA
                                               AND COALESCE(ac.ATCL_FIM_VIGENCIA, :data)) )
-            AND ( :siglaDfe IS NULL
+            AND ( CAST(:siglaDfe AS text) IS NULL
                   OR EXISTS (SELECT 1 FROM TIPO_DFE_CLASSIFICACAO tdcl
                               JOIN TIPO_DFE td ON tdcl.TDCL_TPDF_ID = td.TPDF_ID
                               WHERE tdcl.TDCL_CLTR_ID = ct.CLTR_ID

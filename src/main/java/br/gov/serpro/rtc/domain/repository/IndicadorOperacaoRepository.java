@@ -24,7 +24,7 @@ import br.gov.serpro.rtc.domain.model.entity.IndicadorOpNbsClassificacao;
 public interface IndicadorOperacaoRepository extends JpaRepository<IndicadorOpNbsClassificacao, Long> {
 
     @NativeQuery(value = """
-        SELECT EXISTS (
+        SELECT CASE WHEN EXISTS (
             SELECT 1
             FROM CLASSIF_NBS_INDOP_LC c
             INNER JOIN CLASSIFICACAO_TRIBUTARIA ct ON c.CNIL_CLTR_ID = ct.CLTR_ID
@@ -32,11 +32,11 @@ public interface IndicadorOperacaoRepository extends JpaRepository<IndicadorOpNb
             WHERE c.CNIL_NBS_CD = :nbsCd
               AND ct.CLTR_CD = :cClassTrib
               AND io.IOIC_CD = :cIndOp
-              AND (:cTribNac IS NULL OR c.CNIL_LSLC_CD = :cTribNac)
-              AND c.CNIL_INICIO_VIGENCIA <= :dataOcorrenciaFatoGerador
+              AND (CAST(:cTribNac AS text) IS NULL OR c.CNIL_LSLC_CD = :cTribNac)
+              AND c.CNIL_INICIO_VIGENCIA <= CAST(:dataOcorrenciaFatoGerador AS date)
               AND (c.CNIL_FIM_VIGENCIA IS NULL 
-                   OR c.CNIL_FIM_VIGENCIA >= :dataOcorrenciaFatoGerador)
-        )
+                   OR c.CNIL_FIM_VIGENCIA >= CAST(:dataOcorrenciaFatoGerador AS date))
+        ) THEN 1 ELSE 0 END
             """)
     int validarCombinacaoExiste(
             @Param("nbsCd") String nbsCd,
@@ -51,7 +51,7 @@ public interface IndicadorOperacaoRepository extends JpaRepository<IndicadorOpNb
             io.IOIC_CD_LOCAL_INCIDENCIA
         FROM INDICADOR_OPERACAO_IBS_CBS io
         WHERE io.IOIC_CD = :cIndOp
-          AND :data BETWEEN io.IOIC_INICIO_VIGENCIA AND COALESCE(io.IOIC_FIM_VIGENCIA, :data)
+          AND CAST(:data AS date) BETWEEN io.IOIC_INICIO_VIGENCIA AND COALESCE(io.IOIC_FIM_VIGENCIA, CAST(:data AS date))
             """)
     Object[] buscarLocalOperacaoPorIndOp(
             @Param("cIndOp") String cIndOp,
@@ -110,9 +110,9 @@ public interface IndicadorOperacaoRepository extends JpaRepository<IndicadorOpNb
             INNER JOIN SITUACAO_TRIBUTARIA st ON ct.CLTR_SITR_ID = st.SITR_ID
         WHERE
             c.CNIL_NBS_CD = :nbs
-            AND :data BETWEEN c.CNIL_INICIO_VIGENCIA AND COALESCE(c.CNIL_FIM_VIGENCIA, :data)
-            AND :data BETWEEN ct.CLTR_INICIO_VIGENCIA AND COALESCE(ct.CLTR_FIM_VIGENCIA, :data)
-            AND :data BETWEEN st.SITR_INICIO_VIGENCIA AND COALESCE(st.SITR_FIM_VIGENCIA, :data)
+            AND CAST(:data AS date) BETWEEN c.CNIL_INICIO_VIGENCIA AND COALESCE(c.CNIL_FIM_VIGENCIA, CAST(:data AS date))
+            AND CAST(:data AS date) BETWEEN ct.CLTR_INICIO_VIGENCIA AND COALESCE(ct.CLTR_FIM_VIGENCIA, CAST(:data AS date))
+            AND CAST(:data AS date) BETWEEN st.SITR_INICIO_VIGENCIA AND COALESCE(st.SITR_FIM_VIGENCIA, CAST(:data AS date))
         ORDER BY ct.CLTR_CD, st.SITR_CD
         """)
     List<NfseSituacaoClassificacaoOutput> buscarSituacoesClassificacoesPorNbsEData(
@@ -128,8 +128,8 @@ public interface IndicadorOperacaoRepository extends JpaRepository<IndicadorOpNb
         FROM CLASSIFICACAO_TRIBUTARIA ct
         INNER JOIN SITUACAO_TRIBUTARIA st ON ct.CLTR_SITR_ID = st.SITR_ID
         WHERE ct.CLTR_CD = :codigoClassificacaoTributaria
-          AND :data BETWEEN ct.CLTR_INICIO_VIGENCIA AND COALESCE(ct.CLTR_FIM_VIGENCIA, :data)
-          AND :data BETWEEN st.SITR_INICIO_VIGENCIA AND COALESCE(st.SITR_FIM_VIGENCIA, :data)
+          AND CAST(:data AS date) BETWEEN ct.CLTR_INICIO_VIGENCIA AND COALESCE(ct.CLTR_FIM_VIGENCIA, CAST(:data AS date))
+          AND CAST(:data AS date) BETWEEN st.SITR_INICIO_VIGENCIA AND COALESCE(st.SITR_FIM_VIGENCIA, CAST(:data AS date))
         LIMIT 1
         """)
     NfseSituacaoClassificacaoOutput buscarSituacaoClassificacaoPorClassificacao(

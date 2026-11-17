@@ -107,8 +107,8 @@ public interface TratamentoClassificacaoRepository extends JpaRepository<Tratame
               AND :data BETWEEN ct.CLTR_INICIO_VIGENCIA AND COALESCE(ct.CLTR_FIM_VIGENCIA, :data)
               AND :data BETWEEN tt.TRTR_INICIO_VIGENCIA AND COALESCE(tt.TRTR_FIM_VIGENCIA, :data)
               AND :data BETWEEN tst.TRST_INICIO_VIGENCIA AND COALESCE(tst.TRST_FIM_VIGENCIA, :data)
-              AND tst.TRST_TBTO_ID == 2
-              AND (:codigo IS NULL OR ct.CLTR_CD = :codigo)
+              AND tst.TRST_TBTO_ID = 2
+              AND (CAST(:codigo AS text) IS NULL OR ct.CLTR_CD = :codigo)
             ORDER BY ct.CLTR_CD
             """, nativeQuery = true)
     List<Object[]> consultarTratamentoClassificacaoCbsIbs(
@@ -164,8 +164,8 @@ public interface TratamentoClassificacaoRepository extends JpaRepository<Tratame
               AND :data BETWEEN tt.TRTR_INICIO_VIGENCIA AND COALESCE(tt.TRTR_FIM_VIGENCIA, :data)
               AND :data BETWEEN tst.TRST_INICIO_VIGENCIA AND COALESCE(tst.TRST_FIM_VIGENCIA, :data)
               AND :data BETWEEN st.SITR_INICIO_VIGENCIA AND COALESCE(st.SITR_FIM_VIGENCIA, :data)
-              AND tst.TRST_TBTO_ID == 1
-              AND (:codigo IS NULL OR ct.CLTR_CD = :codigo)
+              AND tst.TRST_TBTO_ID = 1
+              AND (CAST(:codigo AS text) IS NULL OR ct.CLTR_CD = :codigo)
             ORDER BY ct.CLTR_CD
             """, nativeQuery = true)
     List<Object[]> consultarTratamentoClassificacaoImpostoSeletivo(

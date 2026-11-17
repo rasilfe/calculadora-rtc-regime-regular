@@ -4,21 +4,15 @@
 package br.gov.serpro.rtc.testesintegracao.validacoes.pedagio;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.Resource;
-import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -27,13 +21,9 @@ import br.gov.serpro.rtc.domain.service.exception.MunicipioNaoPertencenteExcepti
 import br.gov.serpro.rtc.domain.service.pedagio.PedagioService;
 
 @SpringBootTest
-@AutoConfigureMockMvc
 @TestPropertySource(locations = "classpath:application-testes.yml")
 @ActiveProfiles("testes")
 class Teste_pedagio_validacao_4_OrigemUfMunicipioDivergentes {
-
-    @Autowired
-    private MockMvc mockMvc;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -56,14 +46,5 @@ class Teste_pedagio_validacao_4_OrigemUfMunicipioDivergentes {
                 .isExactlyInstanceOf(MunicipioNaoPertencenteException.class);
     }
 
-    @Test
-    void teste_controller_OrigemUfMunicipioDivergentes() throws Exception {
-        final String jsonContent = objectMapper.writeValueAsString(operacao);
-        mockMvc.perform(post("/calculadora/pedagio")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(jsonContent))
-                .andExpect(status().is4xxClientError())
-                .andExpect(jsonPath("$.title").value("Município não pertencente à UF"));
-    }
 
 }

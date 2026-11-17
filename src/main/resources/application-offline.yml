@@ -5,7 +5,8 @@ info:
 application:
   module: api-regime-geral
   db:
-    filename: calculadora-pro.db
+    # Nome do banco PostgreSQL da base de regras (validado pelo DatabaseValidator)
+    name: ${DB_NAME:calculadora_pro}
   ibs:
     enabled: true
   memoriacalculo:
@@ -18,21 +19,25 @@ spring:
     activate:
       on-profile: offline
   datasource:
-    url: jdbc:sqlite:file:./calculadora/db/${application.db.filename}?mode=ro&date_class=TEXT&date_string_format=yyyy-MM-dd
-    username: sa
-    password: 
-    driverClassName: org.sqlite.JDBC
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${application.db.name}
+    username: ${DB_USER:calculadora}
+    password: ${DB_PASSWORD:}
+    hikari:
+      # Base somente leitura e quase toda em cache (Caffeine): poucas conexões bastam.
+      maximum-pool-size: ${DB_POOL_MAX:8}
+      minimum-idle: 2
+      # Defina DB_SOMENTE_LEITURA=false junto com DB_MIGRAR_NA_INICIALIZACAO=true.
+      read-only: ${DB_SOMENTE_LEITURA:true}
   jpa:
-    database-platform: org.hibernate.community.dialect.SQLiteDialect
-    defer-datasource-initialization: true
     open-in-view: false
     show-sql: false
     properties:
       hibernate:
         "[format_sql]": false
-  sql:
-    init:
-      mode: embedded
+  flyway:
+    # Em produção a migração roda fora dos workers (Job/pipeline com usuário de escrita).
+    enabled: ${DB_MIGRAR_NA_INICIALIZACAO:false}
+    locations: classpath:db/postgres
   task:
     execution:
       pool:
@@ -80,35 +85,10 @@ logging:
         serpro:
           rtc: INFO
           
+# Sem API HTTP de negócio: o servidor embutido existe apenas para o Actuator
+# (probes de liveness/readiness e métricas Prometheus).
 server:
-  port: 8080
-  servlet:
-    context-path: /api
-  tomcat:
-    use-relative-redirects: true
-    threads:
-      max: 250
-  compression:
-    enabled: true
-    mime-types: application/json
-    min-response-size: 1024
-    
-springdoc:
-  version: '@springdoc.version@'
-  api-docs:
-    path: /api-docs
-    version: openapi-3-1
-  swagger-ui:
-    layout: BaseLayout
-    display-request-duration: true
-    groups-order: DESC
-    operationsSorter: method
-    disable-swagger-default-url: true
-    use-root-path: true
-    supported-submit-methods: ["get", "post"]
-  show-actuator: false
-  cache:
-    disabled: true
+  port: ${MANAGEMENT_PORT:9101}
 
 cache:
   specs:
@@ -216,6 +196,10 @@ cache:
       expireAfterAccess: "P1D"
       initialCapacity: 240 # ~30KB
       maximumSize: 240
+    - name: SituacaoTributariaRepository.consultarSituacaoTributariaPorCodigo
+      expireAfterAccess: "P1D"
+      initialCapacity: 240 # chave: CST + tributo + data
+      maximumSize: 2_000
     - name: TratamentoClassificacaoRepository.buscarTratamentoClassificacao
       expireAfterAccess: "P1D"
       initialCapacity: 400 # ~50KB
@@ -274,8 +258,6 @@ cache:
       maximumSize: 1
           
 management:
-  server:
-    port: 9101
   endpoints:
     web:
       exposure:

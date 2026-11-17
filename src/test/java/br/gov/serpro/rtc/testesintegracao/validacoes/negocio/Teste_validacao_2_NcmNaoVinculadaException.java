@@ -3,10 +3,8 @@
 */
 package br.gov.serpro.rtc.testesintegracao.validacoes.negocio;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.IOException;
 
@@ -14,28 +12,25 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.Resource;
-import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import br.gov.serpro.rtc.api.model.input.OperacaoInput;
 import br.gov.serpro.rtc.domain.service.CalculadoraService;
 import br.gov.serpro.rtc.domain.service.exception.NcmNaoVinculadaException;
+import br.gov.serpro.rtc.util.CalculoTestSupport;
 
 @SpringBootTest
-@AutoConfigureMockMvc
 @TestPropertySource(locations = "classpath:application-testes.yml")
 @ActiveProfiles("testes")
 class Teste_validacao_2_NcmNaoVinculadaException {
 
     @Autowired
-    private MockMvc mockMvc;
+    private CalculoTestSupport calculoTestSupport;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -59,13 +54,9 @@ class Teste_validacao_2_NcmNaoVinculadaException {
     }
 
     @Test
-    void teste_controller_CalcularTributos() throws Exception {
+    void teste_calculoNota_CalcularTributos() throws Exception {
         final String jsonContent = objectMapper.writeValueAsString(operacao);
-        mockMvc.perform(post("/calculadora/regime-geral")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(jsonContent))
-                .andExpect(status().is4xxClientError())
-                .andExpect(jsonPath("$.title").value("NCM não vinculada"));
+        assertThat(calculoTestSupport.titulosErro(jsonContent)).contains("NCM não vinculada");
     }
 
 }

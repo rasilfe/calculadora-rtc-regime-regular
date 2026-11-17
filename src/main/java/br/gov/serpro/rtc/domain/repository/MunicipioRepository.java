@@ -36,7 +36,7 @@ public interface MunicipioRepository extends JpaRepository<Municipio, Long> {
             SELECT 
             CASE 
                 WHEN COUNT(m) = 0 THEN 1
-                WHEN COUNT(m) > 0 AND LOWER(m.uf.sigla) != LOWER(:siglaUf) THEN 2
+                WHEN COUNT(m) > 0 AND MAX(LOWER(m.uf.sigla)) != LOWER(:siglaUf) THEN 2
                 ELSE 0
             END
             FROM Municipio m
