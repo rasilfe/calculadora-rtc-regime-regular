@@ -1,0 +1,31 @@
+# EXEMPLO: escalonamento do consumidor de resultados (sistema externo) pela
+# profundidade da Fila de Saída. Ajuste scaleTargetRef para o Deployment real.
+# O consumidor deve gravar com chave única (idNota, correlationId): a entrega é
+# "pelo menos uma vez" e o mesmo resultado pode chegar mais de uma vez.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: rtc-consumidor-resultado
+  namespace: rtc
+spec:
+  scaleTargetRef:
+    name: rtc-consumidor-resultado
+  minReplicaCount: 1
+  maxReplicaCount: 8
+  pollingInterval: 5
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 180
+  triggers:
+    - type: rabbitmq
+      authenticationRef:
+        name: rtc-rabbitmq-keda
+      metadata:
+        protocol: http
+        host: http://rtc-rabbit.rtc.svc:15672
+        vhostName: rtc
+        queueName: rtc.calculo.saida
+        mode: QueueLength
+        value: "1000"

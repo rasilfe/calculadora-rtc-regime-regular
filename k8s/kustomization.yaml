@@ -1,0 +1,17 @@
+# kubectl apply -k k8s/
+# O Job de migração (k8s/migracao) e o exemplo de escalonamento do consumidor
+# (k8s/consumidor) ficam fora: são aplicados à parte.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: rtc
+resources:
+  - 00-namespace.yaml
+  - rabbitmq/cluster.yaml
+  - rabbitmq/topologia.yaml
+  - redis/redis.yaml
+  - worker/deployment.yaml
+  - worker/keda.yaml
+images:
+  - name: calculadora-rtc-worker
+    newName: registry.local/calculadora-rtc-worker
+    newTag: "1.6.1"

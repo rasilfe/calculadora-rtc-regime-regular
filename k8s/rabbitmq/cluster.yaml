@@ -1,0 +1,42 @@
+# Cluster RabbitMQ gerenciado pelo RabbitMQ Cluster Operator.
+# Pré-requisitos no k3s: Cluster Operator e Messaging Topology Operator instalados.
+apiVersion: rabbitmq.com/v1beta1
+kind: RabbitmqCluster
+metadata:
+  name: rtc-rabbit
+  namespace: rtc
+spec:
+  replicas: 3
+  image: rabbitmq:4.1-management
+  resources:
+    requests:
+      cpu: "1"
+      memory: 2Gi
+    limits:
+      memory: 2Gi
+  persistence:
+    storageClassName: local-path
+    storage: 20Gi
+  rabbitmq:
+    additionalConfig: |
+      vm_memory_high_watermark.relative = 0.6
+      disk_free_limit.absolute = 2GB
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - topologyKey: kubernetes.io/hostname
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: rtc-rabbit
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rtc-rabbit
+  namespace: rtc
+spec:
+  # Mantém o quórum (2 de 3) durante manutenção de nós.
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rtc-rabbit

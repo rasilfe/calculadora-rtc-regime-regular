@@ -23,6 +23,10 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/postgres
+  rabbitmq:
+    listener:
+      simple:
+        auto-startup: false
   task:
     execution:
       pool:
@@ -254,3 +258,9 @@ management:
       base-path: "/"
       path-mapping:
         prometheus: "metrics"
+
+# Os testes não têm broker nem Redis: o worker de filas fica desligado.
+worker:
+  habilitado: false
+  idempotencia:
+    tipo: nenhuma

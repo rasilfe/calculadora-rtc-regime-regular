@@ -1,0 +1,139 @@
+# Worker de cálculo: consome rtc.calculo.entrada e publica em rtc.calculo.out.
+# Réplicas controladas pelo KEDA (keda.yaml); não defina "replicas" aqui.
+#
+# Secrets esperados no namespace:
+#   rtc-db                        host, name, user, password (usuário SOMENTE LEITURA)
+#   rtc-worker-user-credentials   username, password (gerado pelo Topology Operator)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rtc-worker
+  namespace: rtc
+  labels:
+    app.kubernetes.io/name: rtc-worker
+    app.kubernetes.io/part-of: calculadora-rtc
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rtc-worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rtc-worker
+        app.kubernetes.io/part-of: calculadora-rtc
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9101"
+        prometheus.io/path: /metrics
+    spec:
+      # Ao reduzir réplicas, o Spring para de consumir e termina as notas em andamento;
+      # mensagens sem ack voltam para a fila.
+      terminationGracePeriodSeconds: 60
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: rtc-worker
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: worker
+          image: calculadora-rtc-worker
+          ports:
+            - name: gestao
+              containerPort: 9101
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: offline
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=70 -XX:+ExitOnOutOfMemoryError"
+            - name: LOGGING_STRUCTURED_FORMAT_CONSOLE
+              value: ecs
+            # ---- base de regras (PostgreSQL, somente leitura)
+            - name: DB_HOST
+              valueFrom: { secretKeyRef: { name: rtc-db, key: host } }
+            - name: DB_NAME
+              valueFrom: { secretKeyRef: { name: rtc-db, key: name } }
+            - name: DB_USER
+              valueFrom: { secretKeyRef: { name: rtc-db, key: user } }
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: rtc-db, key: password } }
+            - name: DB_POOL_MAX
+              value: "8"
+            # ---- RabbitMQ
+            - name: RABBITMQ_HOST
+              value: rtc-rabbit.rtc.svc
+            - name: RABBITMQ_VHOST
+              value: rtc
+            - name: RABBITMQ_USER
+              valueFrom: { secretKeyRef: { name: rtc-worker-user-credentials, key: username } }
+            - name: RABBITMQ_PASSWORD
+              valueFrom: { secretKeyRef: { name: rtc-worker-user-credentials, key: password } }
+            - name: WORKER_FILA_ENTRADA
+              value: rtc.calculo.entrada
+            - name: WORKER_EXCHANGE_SAIDA
+              value: rtc.calculo.out
+            - name: WORKER_ROUTING_KEY_SAIDA
+              value: resultado
+            # 2 vCPU por pod: 4 consumidores, prefetch 6 (~1,5 x consumidores)
+            - name: WORKER_CONCORRENCIA
+              value: "4"
+            - name: WORKER_PREFETCH
+              value: "6"
+            # ---- idempotência
+            - name: WORKER_IDEMPOTENCIA
+              value: redis
+            - name: REDIS_HOST
+              value: rtc-redis.rtc.svc
+            # ---- observabilidade
+            - name: TRACING_HABILITADO
+              value: "true"
+            - name: TRACING_AMOSTRAGEM
+              value: "0.1"
+            - name: OTLP_TRACING_ENDPOINT
+              value: http://jaeger-collector.observability.svc:4318/v1/traces
+          resources:
+            requests:
+              cpu: "2"
+              memory: 1536Mi
+            limits:
+              # Sem limite de CPU: evita throttling no cálculo (CPU-bound).
+              memory: 2Gi
+          startupProbe:
+            httpGet: { path: /health/liveness, port: gestao }
+            periodSeconds: 3
+            failureThreshold: 40
+          livenessProbe:
+            httpGet: { path: /health/liveness, port: gestao }
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /health/readiness, port: gestao }
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rtc-worker
+  namespace: rtc
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rtc-worker

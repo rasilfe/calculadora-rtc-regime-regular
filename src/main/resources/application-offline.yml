@@ -38,6 +38,42 @@ spring:
     # Em produção a migração roda fora dos workers (Job/pipeline com usuário de escrita).
     enabled: ${DB_MIGRAR_NA_INICIALIZACAO:false}
     locations: classpath:db/postgres
+  threads:
+    virtual:
+      # Listener do RabbitMQ em threads virtuais: a espera pela confirmação do broker
+      # e pelo Redis não ocupa threads de plataforma.
+      enabled: true
+  lifecycle:
+    # Ao escalar para baixo, termina as notas em andamento antes de sair.
+    timeout-per-shutdown-phase: 30s
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: ${RABBITMQ_VHOST:rtc}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
+      observation-enabled: true
+    listener:
+      simple:
+        acknowledge-mode: manual
+        # O cálculo usa CPU: consumidores por pod ~ 2 x vCPU; prefetch ~ 1,5 x consumidores.
+        concurrency: ${WORKER_CONCORRENCIA:4}
+        max-concurrency: ${WORKER_CONCORRENCIA:4}
+        prefetch: ${WORKER_PREFETCH:6}
+        default-requeue-rejected: false
+        observation-enabled: true
+        # Iniciado pelo WorkerConfig quando a aplicação está pronta.
+        auto-startup: false
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 500ms
   task:
     execution:
       pool:
@@ -265,6 +301,31 @@ management:
       base-path: "/"
       path-mapping:
         prometheus: "metrics"
+  endpoint:
+    health:
+      # /health/liveness e /health/readiness para os probes do k3s
+      probes:
+        enabled: true
+  tracing:
+    enabled: ${TRACING_HABILITADO:false}
+    sampling:
+      probability: ${TRACING_AMOSTRAGEM:0.1}
+  otlp:
+    tracing:
+      endpoint: ${OTLP_TRACING_ENDPOINT:http://localhost:4318/v1/traces}
+
+worker:
+  habilitado: ${WORKER_HABILITADO:true}
+  fila-entrada: ${WORKER_FILA_ENTRADA:rtc.calculo.entrada}
+  exchange-saida: ${WORKER_EXCHANGE_SAIDA:rtc.calculo.out}
+  routing-key-saida: ${WORKER_ROUTING_KEY_SAIDA:resultado}
+  timeout-confirmacao: 10s
+  declarar-topologia: ${WORKER_DECLARAR_TOPOLOGIA:false}
+  reprocessar-falha-tecnica: true
+  idempotencia:
+    tipo: ${WORKER_IDEMPOTENCIA:redis}
+    lease: 5m
+    retencao: 2d
 
 versao:
   url: ${VERSAO_OFFLINE_URL:https://piloto-cbs.tributos.gov.br/servico/calculadora-consumo/api/calculadora/dados-abertos/versao}

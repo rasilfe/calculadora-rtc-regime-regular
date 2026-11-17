@@ -1,0 +1,54 @@
+# Aplica as migrações Flyway (src/main/resources/db/postgres) em um banco novo e termina.
+# Rode uma vez por versão da base, ANTES de apontar os workers para o banco:
+#   1. crie o banco (ex.: calculadora_pro_v0059) e o Secret rtc-db-migracao
+#      (host, name, user, password de um usuário com permissão de escrita);
+#   2. kubectl apply -f k8s/migracao/job.yaml  (com a imagem da mesma versão do worker);
+#   3. atualize o Secret rtc-db (usuário somente leitura) com o novo "name" e reinicie os workers.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rtc-migracao-base
+  namespace: rtc
+  labels:
+    app.kubernetes.io/name: rtc-migracao-base
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rtc-migracao-base
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: migracao
+          image: calculadora-rtc-worker
+          args:
+            - --calculadora.somente-migracao=true
+            - --spring.main.web-application-type=none
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: offline
+            - name: WORKER_HABILITADO
+              value: "false"
+            - name: DB_MIGRAR_NA_INICIALIZACAO
+              value: "true"
+            - name: DB_SOMENTE_LEITURA
+              value: "false"
+            - name: DB_HOST
+              valueFrom: { secretKeyRef: { name: rtc-db-migracao, key: host } }
+            - name: DB_NAME
+              valueFrom: { secretKeyRef: { name: rtc-db-migracao, key: name } }
+            - name: DB_USER
+              valueFrom: { secretKeyRef: { name: rtc-db-migracao, key: user } }
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: rtc-db-migracao, key: password } }
+          resources:
+            requests:
+              cpu: 500m
+              memory: 768Mi
+            limits:
+              memory: 1Gi

@@ -1,0 +1,319 @@
+# Topologia do pipeline de cálculo (Messaging Topology Operator).
+#
+#   produtor --(nota)--> rtc.calculo.in --> rtc.calculo.entrada --> worker
+#   worker --(resultado)--> rtc.calculo.out --> rtc.calculo.saida --> consumidor
+#   falhas repetidas / mensagens ilegíveis --> rtc.dlx --> *.dlq
+#
+# Limites, DLX e delivery-limit ficam em Policies (podem ser alterados sem recriar
+# as filas); só o tipo quorum é argumento fixo da fila.
+apiVersion: rabbitmq.com/v1beta1
+kind: Vhost
+metadata:
+  name: rtc
+  namespace: rtc
+spec:
+  name: rtc
+  defaultQueueType: quorum
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+# ---------------------------------------------------------------- exchanges
+apiVersion: rabbitmq.com/v1beta1
+kind: Exchange
+metadata:
+  name: rtc-calculo-in
+  namespace: rtc
+spec:
+  name: rtc.calculo.in
+  vhost: rtc
+  type: direct
+  durable: true
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Exchange
+metadata:
+  name: rtc-calculo-out
+  namespace: rtc
+spec:
+  name: rtc.calculo.out
+  vhost: rtc
+  type: direct
+  durable: true
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Exchange
+metadata:
+  name: rtc-dlx
+  namespace: rtc
+spec:
+  name: rtc.dlx
+  vhost: rtc
+  type: direct
+  durable: true
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+# ---------------------------------------------------------------- filas
+apiVersion: rabbitmq.com/v1beta1
+kind: Queue
+metadata:
+  name: rtc-calculo-entrada
+  namespace: rtc
+spec:
+  name: rtc.calculo.entrada
+  vhost: rtc
+  type: quorum
+  durable: true
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Queue
+metadata:
+  name: rtc-calculo-saida
+  namespace: rtc
+spec:
+  name: rtc.calculo.saida
+  vhost: rtc
+  type: quorum
+  durable: true
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Queue
+metadata:
+  name: rtc-calculo-entrada-dlq
+  namespace: rtc
+spec:
+  name: rtc.calculo.entrada.dlq
+  vhost: rtc
+  type: quorum
+  durable: true
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Queue
+metadata:
+  name: rtc-calculo-saida-dlq
+  namespace: rtc
+spec:
+  name: rtc.calculo.saida.dlq
+  vhost: rtc
+  type: quorum
+  durable: true
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+# ---------------------------------------------------------------- bindings
+apiVersion: rabbitmq.com/v1beta1
+kind: Binding
+metadata:
+  name: rtc-calculo-entrada
+  namespace: rtc
+spec:
+  vhost: rtc
+  source: rtc.calculo.in
+  destination: rtc.calculo.entrada
+  destinationType: queue
+  routingKey: nota
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Binding
+metadata:
+  name: rtc-calculo-saida
+  namespace: rtc
+spec:
+  vhost: rtc
+  source: rtc.calculo.out
+  destination: rtc.calculo.saida
+  destinationType: queue
+  routingKey: resultado
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Binding
+metadata:
+  name: rtc-calculo-entrada-dlq
+  namespace: rtc
+spec:
+  vhost: rtc
+  source: rtc.dlx
+  destination: rtc.calculo.entrada.dlq
+  destinationType: queue
+  routingKey: rtc.calculo.entrada.dlq
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Binding
+metadata:
+  name: rtc-calculo-saida-dlq
+  namespace: rtc
+spec:
+  vhost: rtc
+  source: rtc.dlx
+  destination: rtc.calculo.saida.dlq
+  destinationType: queue
+  routingKey: rtc.calculo.saida.dlq
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+# ---------------------------------------------------------------- policies
+apiVersion: rabbitmq.com/v1beta1
+kind: Policy
+metadata:
+  name: rtc-calculo-entrada
+  namespace: rtc
+spec:
+  name: rtc-calculo-entrada
+  vhost: rtc
+  pattern: "^rtc\\.calculo\\.entrada$"
+  applyTo: queues
+  priority: 10
+  definition:
+    dead-letter-exchange: rtc.dlx
+    dead-letter-routing-key: rtc.calculo.entrada.dlq
+    dead-letter-strategy: at-least-once   # exige overflow=reject-publish
+    overflow: reject-publish              # fila cheia recusa a publicação; nunca descarta
+    max-length: 200000                    # ~25 rodadas de 8.000 notas
+    delivery-limit: 5                     # 6ª entrega vai para a DLQ
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Policy
+metadata:
+  name: rtc-calculo-saida
+  namespace: rtc
+spec:
+  name: rtc-calculo-saida
+  vhost: rtc
+  pattern: "^rtc\\.calculo\\.saida$"
+  applyTo: queues
+  priority: 10
+  definition:
+    dead-letter-exchange: rtc.dlx
+    dead-letter-routing-key: rtc.calculo.saida.dlq
+    dead-letter-strategy: at-least-once
+    overflow: reject-publish
+    max-length: 500000                    # folga maior: consumidor lento não deve travar o worker
+    delivery-limit: 5
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+# ---------------------------------------------------------------- usuários
+# O operador gera o Secret "<nome>-user-credentials" (chaves username/password).
+apiVersion: rabbitmq.com/v1beta1
+kind: User
+metadata:
+  name: rtc-worker
+  namespace: rtc
+spec:
+  tags: []
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Permission
+metadata:
+  name: rtc-worker
+  namespace: rtc
+spec:
+  vhost: rtc
+  userReference:
+    name: rtc-worker
+  permissions:
+    configure: "^$"                          # topologia é do operador
+    write: "^rtc\\.calculo\\.out$"
+    read: "^rtc\\.calculo\\.entrada$"
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: User
+metadata:
+  name: rtc-produtor
+  namespace: rtc
+spec:
+  tags: []
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Permission
+metadata:
+  name: rtc-produtor
+  namespace: rtc
+spec:
+  vhost: rtc
+  userReference:
+    name: rtc-produtor
+  permissions:
+    configure: "^$"
+    write: "^rtc\\.calculo\\.in$"
+    read: "^$"
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: User
+metadata:
+  name: rtc-consumidor
+  namespace: rtc
+spec:
+  tags: []
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Permission
+metadata:
+  name: rtc-consumidor
+  namespace: rtc
+spec:
+  vhost: rtc
+  userReference:
+    name: rtc-consumidor
+  permissions:
+    configure: "^$"
+    write: "^$"
+    read: "^rtc\\.calculo\\.saida$"
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+# Usuário do KEDA: só lê a profundidade das filas pela API de gerenciamento.
+apiVersion: rabbitmq.com/v1beta1
+kind: User
+metadata:
+  name: rtc-keda
+  namespace: rtc
+spec:
+  tags:
+    - monitoring
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Permission
+metadata:
+  name: rtc-keda
+  namespace: rtc
+spec:
+  vhost: rtc
+  userReference:
+    name: rtc-keda
+  permissions:
+    configure: "^$"
+    write: "^$"
+    read: "^$"
+  rabbitmqClusterReference:
+    name: rtc-rabbit
