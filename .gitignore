@@ -31,3 +31,6 @@ calculadora/
 
 # saída do Maven
 target/
+
+# exceção: o Maven Wrapper precisa do jar no repositório (build da imagem não tem curl/wget)
+!.mvn/wrapper/maven-wrapper.jar

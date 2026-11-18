@@ -129,8 +129,9 @@ jobs:
 
   imagem:
     name: Build da imagem (sem publicar)
-    # Em push/PR o input não existe (nulo); o deploy chama com false porque publica a imagem.
-    if: ${{ inputs.construir-imagem != false }}
+    # Em PR o input não existe (nulo); o deploy chama com false porque publica a imagem.
+    # Compara como texto: nas expressões do GitHub, null != false é falso (ambos viram 0).
+    if: ${{ format('{0}', inputs.construir-imagem) != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
