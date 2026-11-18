@@ -1,0 +1,23 @@
+# Overlay ENXUTO: nó único com cerca de 6 GB de RAM e 4 vCPU (ex.: VM num Proxmox doméstico
+# que divide o host com outras VMs). Mesmo desenho do overlay vps, com menos memória
+# (o kustomize não empilha um overlay sobre outro que parte da mesma base):
+#   kubectl apply -k k8s/ambientes/enxuto
+# No deploy pelo GitHub Actions: K8S_MANIFESTOS=k8s/ambientes/enxuto e
+# K8S_PRE_REQUISITOS=k8s/ambientes/enxuto/banco no environment.
+#
+# Igual ao vps: RabbitMQ com 1 réplica sem anti-affinity, sem PDB do worker, 3
+# consumidores por pod. Em relação ao vps:
+#   - worker fixo em 1 pod (KEDA de 1 a 1), limite de 1,5 GiB;
+#   - rollout sem pod extra (maxSurge 0): durante o deploy as notas esperam na fila;
+#   - RabbitMQ com limite de 1 GiB e disco de 5 GiB.
+# O PostgreSQL enxuto fica em banco/.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: rtc
+resources:
+  - ../../base
+patches:
+  - path: rabbitmq.yaml
+  - path: worker.yaml
+  - path: keda.yaml
+  - path: pdb-worker.yaml

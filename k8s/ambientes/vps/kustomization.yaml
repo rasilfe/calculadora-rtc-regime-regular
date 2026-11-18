@@ -1,0 +1,21 @@
+# Overlay de NÓ ÚNICO (VPS com 4 vCPU e 16 GB de RAM).
+#   kubectl apply -k k8s/ambientes/vps
+# No deploy pelo GitHub Actions, defina a variável K8S_MANIFESTOS=k8s/ambientes/vps no
+# environment correspondente (ver k8s/README.md, seção "VPS de nó único").
+#
+# Em relação à base (k8s/, 3 nós):
+#   - RabbitMQ com 1 réplica (sem anti-affinity), recursos menores;
+#   - worker com reserva de 1 vCPU, 3 consumidores por pod e KEDA de 1 a 2 réplicas;
+#   - sem PodDisruptionBudget do worker (com 1 réplica ele impediria o drain do nó);
+#   - PostgreSQL dentro do cluster: kustomize separado em banco/, aplicado antes do Job de
+#     migração (variável K8S_PRE_REQUISITOS=k8s/ambientes/vps/banco no environment).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: rtc
+resources:
+  - ../../base
+patches:
+  - path: rabbitmq.yaml
+  - path: worker.yaml
+  - path: keda.yaml
+  - path: pdb-worker.yaml

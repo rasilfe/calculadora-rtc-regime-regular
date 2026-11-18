@@ -11,6 +11,14 @@ inputs:
   digest:
     description: "Digest da imagem publicada (sha256:...)"
     required: true
+  manifestos:
+    description: "Diretório kustomize a aplicar (k8s = 3 nós; k8s/ambientes/vps = nó único)"
+    required: false
+    default: k8s
+  pre-requisitos:
+    description: "Diretório kustomize aplicado antes da migração (ex.: k8s/ambientes/vps/banco); vazio para nenhum"
+    required: false
+    default: ""
   namespace:
     description: Namespace do k3s
     required: false
@@ -49,10 +57,22 @@ runs:
         sed -i -E \
           -e "s|^(\s*newName:).*|\1 ${{ inputs.imagem }}|" \
           -e "s|^(\s*)newTag:.*|\1digest: ${{ inputs.digest }}|" \
-          k8s/kustomization.yaml
+          k8s/base/kustomization.yaml
         sed -i -E "s|^(\s*image:) calculadora-rtc-worker\s*$|\1 $REF|" k8s/migracao/job.yaml
-        grep -n "digest:" k8s/kustomization.yaml
+        grep -n "digest:" k8s/base/kustomization.yaml
         grep -n "image:" k8s/migracao/job.yaml
+
+    - name: "Pré-requisitos da migração (ex.: PostgreSQL no cluster)"
+      if: inputs.pre-requisitos != ''
+      shell: bash
+      run: |
+        set -euo pipefail
+        NS="${{ inputs.namespace }}"
+        kubectl kustomize "${{ inputs.pre-requisitos }}" > "$RUNNER_TEMP/pre-requisitos.yaml"
+        kubectl apply -f "$RUNNER_TEMP/pre-requisitos.yaml"
+        for sts in $(awk '/^kind: StatefulSet/{f=1} f&&/^  name:/{print $2; f=0}' "$RUNNER_TEMP/pre-requisitos.yaml"); do
+          kubectl -n "$NS" rollout status "statefulset/$sts" --timeout=5m
+        done
 
     - name: Migrar a base de regras (Job)
       shell: bash
@@ -73,7 +93,7 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        kubectl kustomize k8s/ > "$RUNNER_TEMP/manifestos.yaml"
+        kubectl kustomize "${{ inputs.manifestos }}" > "$RUNNER_TEMP/manifestos.yaml"
         grep -n "image:" "$RUNNER_TEMP/manifestos.yaml"
         kubectl apply -f "$RUNNER_TEMP/manifestos.yaml"
 

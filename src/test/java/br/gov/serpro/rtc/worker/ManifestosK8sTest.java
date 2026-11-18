@@ -37,8 +37,10 @@ class ManifestosK8sTest {
     @BeforeAll
     static void carregar() throws IOException {
         try (Stream<Path> arquivos = Files.walk(RAIZ)) {
+            // ambientes/ contém overlays (patches que repetem tipo e nome da base): ver AmbienteVpsTest
             for (Path arquivo : arquivos.filter(p -> p.toString().endsWith(".yaml"))
-                    .filter(p -> !p.equals(MODELO_EMPRESA)).toList()) {
+                    .filter(p -> !p.equals(MODELO_EMPRESA))
+                    .filter(p -> !p.startsWith(RAIZ.resolve("ambientes"))).toList()) {
                 try (Reader r = Files.newBufferedReader(arquivo, StandardCharsets.UTF_8)) {
                     DOCUMENTOS.addAll(carregarTodos(r, arquivo.toString()));
                 }
@@ -59,9 +61,13 @@ class ManifestosK8sTest {
 
     @Test
     void kustomizationListaArquivosExistentes() {
-        final var kustomization = unico(DOCUMENTOS, "Kustomization", null);
-        for (Object recurso : (List<?>) kustomization.get("resources")) {
-            assertThat(RAIZ.resolve(recurso.toString())).exists();
+        final var kustomizations = doTipo(DOCUMENTOS, "Kustomization");
+        assertThat(kustomizations).hasSize(2);
+        for (var kustomization : kustomizations) {
+            final Path dir = Path.of(kustomization.get("__arquivo").toString()).getParent();
+            for (Object recurso : (List<?>) kustomization.get("resources")) {
+                assertThat(dir.resolve(recurso.toString())).exists();
+            }
         }
     }
 

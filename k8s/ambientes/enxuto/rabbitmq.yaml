@@ -1,0 +1,22 @@
+# RabbitMQ enxuto: o watermark relativo (0,6 do limite) bloqueia publicadores antes do OOM.
+apiVersion: rabbitmq.com/v1beta1
+kind: RabbitmqCluster
+metadata:
+  name: rtc-rabbit
+  namespace: rtc
+spec:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      memory: 1Gi
+  persistence:
+    storage: 5Gi
+  rabbitmq:
+    additionalConfig: |
+      vm_memory_high_watermark.relative = 0.6
+      disk_free_limit.absolute = 1GB
+  # CRD: JSON merge patch, null remove a anti-affinity da base.
+  affinity: null

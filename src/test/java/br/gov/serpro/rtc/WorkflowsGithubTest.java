@@ -80,9 +80,9 @@ class WorkflowsGithubTest {
     @Test
     void manifestosTemAsLinhasQueAActionReescreve() throws IOException {
         final String action = Files.readString(ACTION_DEPLOY, StandardCharsets.UTF_8);
-        assertThat(action).contains("k8s/kustomization.yaml", "k8s/migracao/job.yaml", "calculadora-rtc-worker");
+        assertThat(action).contains("k8s/base/kustomization.yaml", "k8s/migracao/job.yaml", "calculadora-rtc-worker");
 
-        final String kustomization = Files.readString(Path.of("k8s/kustomization.yaml"), StandardCharsets.UTF_8);
+        final String kustomization = Files.readString(Path.of("k8s/base/kustomization.yaml"), StandardCharsets.UTF_8);
         assertThat(kustomization).containsPattern("(?m)^\\s*- name: calculadora-rtc-worker$")
                 .containsPattern("(?m)^\\s*newName: ghcr\\.io/[a-z0-9-]+/calculadora-rtc-worker$")
                 .containsPattern("(?m)^\\s*newTag:");
@@ -91,7 +91,7 @@ class WorkflowsGithubTest {
         final String job = Files.readString(Path.of("k8s/migracao/job.yaml"), StandardCharsets.UTF_8);
         assertThat(job).containsPattern("(?m)^\\s*image: calculadora-rtc-worker\\s*$");
         // o Deployment usa o mesmo nome lógico, resolvido pela kustomization
-        final String deployment = Files.readString(Path.of("k8s/worker/deployment.yaml"), StandardCharsets.UTF_8);
+        final String deployment = Files.readString(Path.of("k8s/base/worker/deployment.yaml"), StandardCharsets.UTF_8);
         assertThat(deployment).containsPattern("(?m)^\\s*image: calculadora-rtc-worker\\s*$");
     }
 

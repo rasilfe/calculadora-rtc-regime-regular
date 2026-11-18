@@ -1,0 +1,8 @@
+# PostgreSQL da VPS de nó único. Aplicado pelo deploy ANTES do Job de migração
+# (input pre-requisitos da action deploy-k3s; variável K8S_PRE_REQUISITOS do environment).
+#   kubectl apply -k k8s/ambientes/vps/banco
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: rtc
+resources:
+  - postgres.yaml

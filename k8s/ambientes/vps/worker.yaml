@@ -1,0 +1,28 @@
+# Worker dimensionado para 4 vCPU: reserva de 1 vCPU por pod (sem limite de CPU, usa o
+# que estiver livre), 3 consumidores por pod e pool de banco menor.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rtc-worker
+  namespace: rtc
+spec:
+  template:
+    spec:
+      # Distribuir entre nós não se aplica com um nó só.
+      topologySpreadConstraints: null
+      containers:
+        - name: worker
+          env:
+            - name: WORKER_CONCORRENCIA
+              value: "3"
+            - name: WORKER_PREFETCH
+              value: "5"
+            # DB_HOST continua vindo do Secret rtc-db (host=rtc-postgres.rtc.svc nesta VPS).
+            - name: DB_POOL_MAX
+              value: "4"
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1536Mi
+            limits:
+              memory: 2Gi

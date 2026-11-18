@@ -1,0 +1,9 @@
+# PostgreSQL enxuto (aplicado antes do Job de migração, como no overlay vps):
+#   kubectl apply -k k8s/ambientes/enxuto/banco
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: rtc
+resources:
+  - ../../vps/banco
+patches:
+  - path: postgres.yaml

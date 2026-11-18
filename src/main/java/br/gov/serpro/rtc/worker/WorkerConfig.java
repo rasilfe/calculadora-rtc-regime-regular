@@ -72,7 +72,7 @@ public class WorkerConfig {
     /**
      * Topologia para desenvolvimento local ({@code worker.declarar-topologia=true}).
      * Em k3s, a mesma topologia é criada pelo Messaging Topology Operator
-     * ({@code k8s/rabbitmq/topologia.yaml}), com os limites definidos em policies.
+     * ({@code k8s/base/rabbitmq/topologia.yaml}), com os limites definidos em policies.
      */
     @Bean
     @ConditionalOnProperty(prefix = "worker", name = "declarar-topologia", havingValue = "true")
