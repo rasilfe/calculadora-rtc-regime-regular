@@ -138,6 +138,26 @@ class CalculoBaseListenerTest {
     }
 
     @Test
+    void tipoIsMercadoriasVaiParaOCalculoDoIs() throws Exception {
+        when(calculo.calcular(any())).thenReturn(resultado(ResultadoBaseCalculo.Status.SUCESSO));
+        final String corpo = """
+                {"schemaVersion":"1","tipo":"is_mercadorias","correlationId":"%s",
+                 "payload":{"anoFatoGerador":2027,"valorBem":100,"icms":15}}
+                """.formatted(correlationId);
+
+        listener.receber(mensagem(corpo, "base." + CNPJ, CNPJ), canal);
+
+        final var enviado = ArgumentCaptor.forClass(PedidoBaseCalculo.class);
+        verify(calculo).calcular(enviado.capture());
+        assertThat(enviado.getValue()).isInstanceOfSatisfying(BaseCalculoISMercadoriasEntrada.class, p -> {
+            assertThat(p.cnpj()).isEqualTo(CNPJ);
+            assertThat(p.payload().getValorBem()).isEqualByComparingTo("100");
+            assertThat(p.payload().getIcms()).isEqualByComparingTo("15");
+        });
+        verify(canal).basicAck(TAG, false);
+    }
+
+    @Test
     void tipoDesconhecidoVaiParaADlq() throws Exception {
         listener.receber(mensagem(pedidoNfse("nfe"), "base." + CNPJ, CNPJ), canal);
 
@@ -172,7 +192,7 @@ class CalculoBaseListenerTest {
 
     private ResultadoBaseCalculo resultado(ResultadoBaseCalculo.Status status) {
         return new ResultadoBaseCalculo("1", correlationId, CNPJ, "item-1", "l", TipoBaseCalculo.UNIFICADA, status, "x",
-                null, 1, null, null, null);
+                null, 1, null, null, null, null);
     }
 
     private static Message mensagem(String corpo, String routingKey, String headerCnpj) {

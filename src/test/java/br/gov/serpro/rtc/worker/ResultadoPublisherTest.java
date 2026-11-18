@@ -105,7 +105,7 @@ class ResultadoPublisherTest {
     void baseDeCalculoVaiParaARoutingKeyDaBaseDaEmpresa() {
         aoEnviar(cd -> cd.getFuture().complete(new CorrelationData.Confirm(true, null)));
         final var base = new ResultadoBaseCalculo("1", UUID.randomUUID(), "12ABC34501DE35", "item-9", null,
-                TipoBaseCalculo.NFSE, ResultadoBaseCalculo.Status.ERRO, "1.6.1", null, 1, null, null, null);
+                TipoBaseCalculo.NFSE, ResultadoBaseCalculo.Status.ERRO, "1.6.1", null, 1, null, null, null, null);
 
         assertThatCode(() -> publisher.publicarBaseConfirmado(base)).doesNotThrowAnyException();
 

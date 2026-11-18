@@ -11,7 +11,9 @@ import org.springframework.stereotype.Service;
 import br.gov.serpro.rtc.api.exceptionhandler.dto.ErroDetalhe;
 import br.gov.serpro.rtc.api.exceptionhandler.enumeration.CodigoValidacao;
 import br.gov.serpro.rtc.api.exceptionhandler.enumeration.ProblemType;
+import br.gov.serpro.rtc.api.model.output.basecalculo.BaseCalculoISMercadoriasModel;
 import br.gov.serpro.rtc.api.model.output.basecalculo.BaseCalculoUnificadaNfseOutput;
+import br.gov.serpro.rtc.domain.service.basecalculo.BaseCalculoService;
 import br.gov.serpro.rtc.domain.service.basecalculo.BaseCalculoUnificadaNfseService;
 import br.gov.serpro.rtc.domain.service.basecalculo.BaseCalculoUnificadaService;
 import br.gov.serpro.rtc.domain.service.exception.CampoInvalidoException;
@@ -19,8 +21,9 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 
 /**
- * Calcula a base de um pedido da fila de base de cálculo: base unificada (NF-e e NFC-e)
- * ou base da NFS-e, conforme o {@code tipo} do envelope.
+ * Calcula a base de um pedido da fila de base de cálculo: base unificada (NF-e e NFC-e),
+ * base da NFS-e ou base do Imposto Seletivo sobre mercadorias, conforme o {@code tipo}
+ * do envelope.
  *
  * <p>Aplica as mesmas validações dos antigos endpoints ({@code @Valid} do input e
  * {@link CampoInvalidoException} do serviço). Dados inválidos viram um resultado
@@ -35,16 +38,19 @@ public class CalculoBaseService {
 
     private final BaseCalculoUnificadaService baseCalculoUnificadaService;
     private final BaseCalculoUnificadaNfseService baseCalculoUnificadaNfseService;
+    private final BaseCalculoService baseCalculoService;
     private final Validator validator;
     private final String versaoApp;
     private final String baseUrlErros;
 
     public CalculoBaseService(BaseCalculoUnificadaService baseCalculoUnificadaService,
-            BaseCalculoUnificadaNfseService baseCalculoUnificadaNfseService, Validator validator,
+            BaseCalculoUnificadaNfseService baseCalculoUnificadaNfseService, BaseCalculoService baseCalculoService,
+            Validator validator,
             @Value("${info.app.version:unknown}") String versaoApp,
             @Value("${calculadora.erros.base-url:https://piloto-cbs.tributos.gov.br/servico/calculadora-consumo}") String baseUrlErros) {
         this.baseCalculoUnificadaService = baseCalculoUnificadaService;
         this.baseCalculoUnificadaNfseService = baseCalculoUnificadaNfseService;
+        this.baseCalculoService = baseCalculoService;
         this.validator = validator;
         this.versaoApp = versaoApp;
         this.baseUrlErros = baseUrlErros;
@@ -55,6 +61,7 @@ public class CalculoBaseService {
         return switch (pedido) {
             case BaseCalculoEntrada unificada -> calcularUnificada(unificada);
             case BaseCalculoNfseEntrada nfse -> calcularNfse(nfse);
+            case BaseCalculoISMercadoriasEntrada is -> calcularIsMercadorias(is);
         };
     }
 
@@ -68,7 +75,7 @@ public class CalculoBaseService {
             final var bases = baseCalculoUnificadaService.calcular(pedido.payload());
             return new ResultadoBaseCalculo(ResultadoBaseCalculo.SCHEMA_VERSION, pedido.correlationId(), pedido.cnpj(),
                     pedido.idCalculo(), pedido.loteId(), TipoBaseCalculo.UNIFICADA, ResultadoBaseCalculo.Status.SUCESSO,
-                    versaoApp, agora(), duracaoMs(inicio), null, bases, null);
+                    versaoApp, agora(), duracaoMs(inicio), null, bases, null, null);
         } catch (CampoInvalidoException e) {
             return erro(pedido, pedido.idCalculo(), pedido.loteId(), inicio,
                     List.of(erroDeNegocio(e, "#/tipoDocumento")), null);
@@ -98,10 +105,33 @@ public class CalculoBaseService {
             }
             return new ResultadoBaseCalculo(ResultadoBaseCalculo.SCHEMA_VERSION, pedido.correlationId(), pedido.cnpj(),
                     pedido.idCalculo(), pedido.loteId(), TipoBaseCalculo.NFSE, ResultadoBaseCalculo.Status.SUCESSO,
-                    versaoApp, agora(), duracaoMs(inicio), null, null, bases);
+                    versaoApp, agora(), duracaoMs(inicio), null, null, bases, null);
         } catch (CampoInvalidoException e) {
             // única recusa estrutural do serviço: situacao locacao9903 sem o grupo locacao
             return erro(pedido, pedido.idCalculo(), pedido.loteId(), inicio, List.of(erroDeNegocio(e, "#/locacao")),
+                    null);
+        }
+    }
+
+    /**
+     * Base do Imposto Seletivo sobre mercadorias pelo algoritmo oficial
+     * ({@link BaseCalculoService#calcularISMercadorias}). As recusas do serviço (ano anterior a
+     * 2027, ICMS ou ISS a partir de 2033, base negativa) viram {@code ERRO} com {@code REG-024}.
+     */
+    private ResultadoBaseCalculo calcularIsMercadorias(BaseCalculoISMercadoriasEntrada pedido) {
+        final long inicio = System.nanoTime();
+        final var erros = validar(pedido.payload());
+        if (!erros.isEmpty()) {
+            return erro(pedido, pedido.idCalculo(), pedido.loteId(), inicio, erros, null);
+        }
+        try {
+            final BaseCalculoISMercadoriasModel base = baseCalculoService.calcularISMercadorias(pedido.payload());
+            return new ResultadoBaseCalculo(ResultadoBaseCalculo.SCHEMA_VERSION, pedido.correlationId(), pedido.cnpj(),
+                    pedido.idCalculo(), pedido.loteId(), TipoBaseCalculo.IS_MERCADORIAS,
+                    ResultadoBaseCalculo.Status.SUCESSO, versaoApp, agora(), duracaoMs(inicio), null, null, null, base);
+        } catch (CampoInvalidoException e) {
+            final String ponteiro = e.getMessage().startsWith("Para IS, o ano") ? "#/anoFatoGerador" : null;
+            return erro(pedido, pedido.idCalculo(), pedido.loteId(), inicio, List.of(erroDeNegocio(e, ponteiro)),
                     null);
         }
     }
@@ -137,7 +167,7 @@ public class CalculoBaseService {
             List<ErroDetalhe> erros, BaseCalculoUnificadaNfseOutput basesNfse) {
         return new ResultadoBaseCalculo(ResultadoBaseCalculo.SCHEMA_VERSION, pedido.correlationId(), pedido.cnpj(),
                 idCalculo, loteId, pedido.tipo(), ResultadoBaseCalculo.Status.ERRO, versaoApp, agora(),
-                duracaoMs(inicio), erros, null, basesNfse);
+                duracaoMs(inicio), erros, null, basesNfse, null);
     }
 
     private String uri(String codigo) {
