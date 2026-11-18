@@ -40,9 +40,21 @@ public class WorkerConfig {
     /** Fila de saída só para desenvolvimento local: recebe os resultados de todas as empresas. */
     static final String FILA_SAIDA_DEV = "rtc.calculo.saida.dev";
 
+    /** Binding da fila de base de cálculo: aceita {@code base.<CNPJ>} de qualquer empresa. */
+    static final String BINDING_BASE_ENTRADA = "base.*";
+    /** Prefixo das filas de saída da base de cálculo: {@code rtc.basecalculo.saida.<CNPJ>}. */
+    static final String PREFIXO_FILA_BASE_SAIDA = "rtc.basecalculo.saida.";
+    /** Fila de saída da base só para desenvolvimento local (todas as empresas). */
+    static final String FILA_BASE_SAIDA_DEV = "rtc.basecalculo.saida.dev";
+
     /** Nome da fila de saída de uma empresa. */
     public static String filaSaidaDaEmpresa(String cnpj) {
         return PREFIXO_FILA_SAIDA + cnpj;
+    }
+
+    /** Nome da fila de saída da base de cálculo de uma empresa. */
+    public static String filaBaseSaidaDaEmpresa(String cnpj) {
+        return PREFIXO_FILA_BASE_SAIDA + cnpj;
     }
 
     @Bean
@@ -51,7 +63,7 @@ public class WorkerConfig {
         return new InicioConsumo(registry);
     }
 
-    /** Inicia o consumo da Fila de Entrada quando a aplicação está pronta. */
+    /** Inicia o consumo das filas de entrada (notas e base de cálculo) quando a aplicação está pronta. */
     static class InicioConsumo {
         private final RabbitListenerEndpointRegistry registry;
 
@@ -61,10 +73,12 @@ public class WorkerConfig {
 
         @EventListener(ApplicationReadyEvent.class)
         void iniciar() {
-            final var container = registry.getListenerContainer(CalculoNotaListener.ID_CONTAINER);
-            if (container != null && !container.isRunning()) {
-                container.start();
-                log.info("Consumo da Fila de Entrada iniciado");
+            for (String id : new String[] { CalculoNotaListener.ID_CONTAINER, CalculoBaseListener.ID_CONTAINER }) {
+                final var container = registry.getListenerContainer(id);
+                if (container != null && !container.isRunning()) {
+                    container.start();
+                    log.info("Consumo iniciado: {}", id);
+                }
             }
         }
     }
@@ -82,17 +96,28 @@ public class WorkerConfig {
         final TopicExchange saida = ExchangeBuilder.topicExchange(properties.getExchangeSaida()).durable(true).build();
         final TopicExchange dlx = ExchangeBuilder.topicExchange(EXCHANGE_DLX).durable(true).build();
 
+        final String prefixoBaseSaida = properties.getBaseCalculo().getPrefixoRoutingKeySaida();
         final String dlqEntradaNome = properties.getFilaEntrada() + ".dlq";
+        final String filaBaseNome = properties.getBaseCalculo().getFilaEntrada();
+        final String dlqBaseNome = filaBaseNome + ".dlq";
         final Queue filaEntrada = filaQuorum(properties.getFilaEntrada(), 200_000, dlqEntradaNome);
         final Queue filaSaidaDev = filaQuorum(FILA_SAIDA_DEV, 500_000, null);
         final Queue dlqEntrada = QueueBuilder.durable(dlqEntradaNome).quorum().build();
         final Queue dlqSaida = QueueBuilder.durable(DLQ_SAIDA).quorum().build();
+        final Queue filaBase = filaQuorum(filaBaseNome, 200_000, dlqBaseNome);
+        final Queue filaBaseSaidaDev = filaQuorum(FILA_BASE_SAIDA_DEV, 500_000, null);
+        final Queue dlqBase = QueueBuilder.durable(dlqBaseNome).quorum().build();
 
         return new Declarables(entrada, saida, dlx, filaEntrada, filaSaidaDev, dlqEntrada, dlqSaida,
+                filaBase, filaBaseSaidaDev, dlqBase,
                 BindingBuilder.bind(filaEntrada).to(entrada).with(BINDING_ENTRADA),
                 BindingBuilder.bind(filaSaidaDev).to(saida).with(prefixoSaida + "#"),
                 BindingBuilder.bind(dlqEntrada).to(dlx).with(dlqEntradaNome),
-                BindingBuilder.bind(dlqSaida).to(dlx).with(prefixoSaida + "#"));
+                BindingBuilder.bind(dlqSaida).to(dlx).with(prefixoSaida + "#"),
+                BindingBuilder.bind(filaBase).to(entrada).with(BINDING_BASE_ENTRADA),
+                BindingBuilder.bind(filaBaseSaidaDev).to(saida).with(prefixoBaseSaida + "#"),
+                BindingBuilder.bind(dlqBase).to(dlx).with(dlqBaseNome),
+                BindingBuilder.bind(dlqSaida).to(dlx).with(prefixoBaseSaida + "#"));
     }
 
     /**

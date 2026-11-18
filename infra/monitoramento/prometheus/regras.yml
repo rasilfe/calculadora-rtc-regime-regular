@@ -11,11 +11,11 @@ groups:
           resumo: "Worker sem responder às coletas há 2 min"
 
       - alert: RtcFilaSemConsumidores
-        expr: rabbitmq_detailed_queue_consumers{queue="rtc.calculo.entrada"} == 0
+        expr: rabbitmq_detailed_queue_consumers{queue=~`rtc\.(calculo|basecalculo)\.entrada`} == 0
         for: 2m
         labels: { severidade: critica }
         annotations:
-          resumo: "Fila de entrada sem consumidores: nenhuma nota está sendo calculada"
+          resumo: "{{ $labels.queue }} sem consumidores: nada dessa fila está sendo calculado"
 
       - alert: RtcMensagensNaDlq
         # strings PromQL entre crases são cruas: \. não precisa de escape duplo
@@ -51,7 +51,7 @@ groups:
           resumo: "RabbitMQ no limite de memória: publicadores (empresas) bloqueados"
 
       - alert: RtcEmpresaNaoConsome
-        expr: rabbitmq_detailed_queue_messages_ready{queue=~`rtc\.calculo\.saida\.[0-9A-Z]{12}[0-9]{2}`} > 5000
+        expr: rabbitmq_detailed_queue_messages_ready{queue=~`rtc\.(calculo|basecalculo)\.saida\.[0-9A-Z]{12}[0-9]{2}`} > 5000
         for: 30m
         labels: { severidade: media }
         annotations:

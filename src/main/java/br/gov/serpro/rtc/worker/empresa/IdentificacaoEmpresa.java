@@ -39,6 +39,15 @@ public final class IdentificacaoEmpresa {
     }
 
     public static Resultado identificar(MessageProperties props, String cnpjDoCorpo, WorkerProperties.MultiEmpresa config) {
+        return identificar(props, cnpjDoCorpo, config, config.getPrefixoRoutingKeyEntrada());
+    }
+
+    /**
+     * Como {@link #identificar(MessageProperties, String, WorkerProperties.MultiEmpresa)}, para
+     * filas cuja routing key de entrada tem outro prefixo (ex.: {@code base.<CNPJ>}).
+     */
+    public static Resultado identificar(MessageProperties props, String cnpjDoCorpo, WorkerProperties.MultiEmpresa config,
+            String prefixoRoutingKeyEntrada) {
         final Object header = props.getHeader(config.getHeaderCnpj());
         if (header == null) {
             return Resultado.recusa("header " + config.getHeaderCnpj() + " ausente");
@@ -48,7 +57,7 @@ public final class IdentificacaoEmpresa {
             return Resultado.recusa("header " + config.getHeaderCnpj() + " com CNPJ inválido: " + header);
         }
         if (config.isExigirRoutingKeyDaEmpresa()) {
-            final String esperada = config.getPrefixoRoutingKeyEntrada() + cnpj.get().valor();
+            final String esperada = prefixoRoutingKeyEntrada + cnpj.get().valor();
             final String recebida = props.getReceivedRoutingKey();
             if (!esperada.equals(recebida)) {
                 return Resultado.recusa("routing key '" + recebida + "' não corresponde ao CNPJ do header (esperada '"

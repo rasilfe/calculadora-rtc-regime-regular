@@ -144,6 +144,78 @@ spec:
   rabbitmqClusterReference:
     name: rtc-rabbit
 ---
+# ---------------------------------------------------------------- base de cálculo
+# Fila própria para a base unificada (um item por mensagem): não espera atrás de uma
+# rodada de notas. Mesma exchange de entrada, routing key base.<CNPJ>; resultados em
+# resultado-base.<CNPJ> -> rtc.basecalculo.saida.<CNPJ> (criada no cadastro da empresa).
+apiVersion: rabbitmq.com/v1beta1
+kind: Queue
+metadata:
+  name: rtc-basecalculo-entrada
+  namespace: rtc
+spec:
+  name: rtc.basecalculo.entrada
+  vhost: rtc
+  type: quorum
+  durable: true
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Queue
+metadata:
+  name: rtc-basecalculo-entrada-dlq
+  namespace: rtc
+spec:
+  name: rtc.basecalculo.entrada.dlq
+  vhost: rtc
+  type: quorum
+  durable: true
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Binding
+metadata:
+  name: rtc-basecalculo-entrada
+  namespace: rtc
+spec:
+  vhost: rtc
+  source: rtc.calculo.in
+  destination: rtc.basecalculo.entrada
+  destinationType: queue
+  routingKey: "base.*"            # base.<CNPJ> de qualquer empresa
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Binding
+metadata:
+  name: rtc-basecalculo-entrada-dlq
+  namespace: rtc
+spec:
+  vhost: rtc
+  source: rtc.dlx
+  destination: rtc.basecalculo.entrada.dlq
+  destinationType: queue
+  routingKey: rtc.basecalculo.entrada.dlq
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Binding
+metadata:
+  name: rtc-basecalculo-saida-dlq
+  namespace: rtc
+spec:
+  vhost: rtc
+  source: rtc.dlx
+  destination: rtc.calculo.saida.dlq
+  destinationType: queue
+  routingKey: "resultado-base.#"  # mesma DLQ de saída das notas
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
 # ---------------------------------------------------------------- policies
 apiVersion: rabbitmq.com/v1beta1
 kind: Policy
@@ -169,13 +241,35 @@ spec:
 apiVersion: rabbitmq.com/v1beta1
 kind: Policy
 metadata:
+  name: rtc-basecalculo-entrada
+  namespace: rtc
+spec:
+  name: rtc-basecalculo-entrada
+  vhost: rtc
+  pattern: "^rtc\\.basecalculo\\.entrada$"
+  applyTo: queues
+  priority: 10
+  definition:
+    dead-letter-exchange: rtc.dlx
+    dead-letter-routing-key: rtc.basecalculo.entrada.dlq
+    dead-letter-strategy: at-least-once
+    overflow: reject-publish
+    max-length: 200000
+    delivery-limit: 5
+  rabbitmqClusterReference:
+    name: rtc-rabbit
+---
+apiVersion: rabbitmq.com/v1beta1
+kind: Policy
+metadata:
   name: rtc-calculo-saida-empresas
   namespace: rtc
 spec:
   name: rtc-calculo-saida-empresas
   vhost: rtc
-  # Filas de saída por empresa: rtc.calculo.saida.<CNPJ> (numérico ou alfanumérico)
-  pattern: "^rtc\\.calculo\\.saida\\.[0-9A-Z]{12}[0-9]{2}$"
+  # Filas de saída por empresa, das notas e da base de cálculo:
+  # rtc.calculo.saida.<CNPJ> e rtc.basecalculo.saida.<CNPJ> (numérico ou alfanumérico)
+  pattern: "^rtc\\.(calculo|basecalculo)\\.saida\\.[0-9A-Z]{12}[0-9]{2}$"
   applyTo: queues
   priority: 10
   definition:
@@ -212,7 +306,7 @@ spec:
   permissions:
     configure: "^$"                          # topologia é do operador
     write: "^rtc\\.calculo\\.out$"
-    read: "^rtc\\.calculo\\.entrada$"
+    read: "^rtc\\.(calculo|basecalculo)\\.entrada$"
   rabbitmqClusterReference:
     name: rtc-rabbit
 ---
