@@ -100,7 +100,8 @@ public class CalculoBaseListener {
 
     /**
      * Lê o envelope e escolhe o contrato pelo campo {@code tipo}: ausente ou {@code UNIFICADA}
-     * para a base unificada, {@code NFSE} para a base da NFS-e. Tipo desconhecido ou JSON
+     * para a base unificada, {@code NFSE} para a base da NFS-e e
+     * {@code IS_MERCADORIAS} para a base do Imposto Seletivo sobre mercadorias. Tipo desconhecido ou JSON
      * ilegível devolvem {@code null} (vai para a DLQ).
      */
     private PedidoBaseCalculo ler(Message mensagem) {
@@ -122,6 +123,7 @@ public class CalculoBaseListener {
             final PedidoBaseCalculo pedido = switch (tipo.get()) {
                 case UNIFICADA -> objectMapper.treeToValue(envelope, BaseCalculoEntrada.class);
                 case NFSE -> objectMapper.treeToValue(envelope, BaseCalculoNfseEntrada.class);
+                case IS_MERCADORIAS -> objectMapper.treeToValue(envelope, BaseCalculoISMercadoriasEntrada.class);
             };
             if (pedido == null || pedido.correlationId() == null || pedido.payload() == null) {
                 log.error("Base de cálculo sem correlationId ou payload (messageId={}); enviando para a DLQ", messageId);

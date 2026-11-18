@@ -123,6 +123,37 @@ class WorkerPontaAPontaTest {
     }
 
     @Test
+    void baseDoIsUsaAMesmaFilaComTipoIsMercadorias() throws Exception {
+        final UUID id = UUID.randomUUID();
+        final ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("anoFatoGerador", 2027);
+        payload.put("valorBem", 100.00);
+        payload.put("ajusteAcrescimos", 10.00);
+        payload.put("juros", 5.00);
+        payload.put("icms", 15.00);
+        final ObjectNode envelope = objectMapper.createObjectNode();
+        envelope.put("schemaVersion", "1");
+        envelope.put("tipo", "IS_MERCADORIAS");
+        envelope.put("correlationId", id.toString());
+        envelope.set("payload", payload);
+        final var props = new MessageProperties();
+        props.setContentType(MessageProperties.CONTENT_TYPE_JSON);
+        props.setHeader("x-cnpj", EMPRESA_A);
+        rabbit.send(WorkerConfig.EXCHANGE_ENTRADA, "base." + EMPRESA_A,
+                new Message(objectMapper.writeValueAsBytes(envelope), props));
+
+        final Message resposta = receber(WorkerConfig.filaBaseSaidaDaEmpresa(EMPRESA_A), ESPERA.toMillis());
+        assertThat(resposta).as("resultado na fila de base da empresa A").isNotNull();
+        final ResultadoBaseCalculo resultado = objectMapper.readValue(resposta.getBody(), ResultadoBaseCalculo.class);
+        assertThat(resultado.correlationId()).isEqualTo(id);
+        assertThat(resultado.tipo()).isEqualTo(TipoBaseCalculo.IS_MERCADORIAS);
+        assertThat(resultado.status()).isEqualTo(ResultadoBaseCalculo.Status.SUCESSO);
+        assertThat(resultado.resultadoIs().getBaseCalculo()).isEqualByComparingTo("100.00");
+        assertThat((String) resposta.getMessageProperties().getHeader("x-tipo")).isEqualTo("IS_MERCADORIAS");
+        aguardarFilaVazia("rtc.basecalculo.entrada");
+    }
+
+    @Test
     void baseDaNfseUsaAMesmaFilaComTipoNfse() throws Exception {
         final UUID id = UUID.randomUUID();
         final ObjectNode payload = objectMapper.createObjectNode();

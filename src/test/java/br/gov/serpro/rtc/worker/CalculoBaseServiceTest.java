@@ -13,8 +13,10 @@ import org.junit.jupiter.api.Test;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import br.gov.serpro.rtc.api.exceptionhandler.dto.ErroDetalhe;
+import br.gov.serpro.rtc.api.model.input.basecalculo.BaseCalculoISMercadoriasInput;
 import br.gov.serpro.rtc.api.model.input.basecalculo.BaseCalculoUnificadaInput;
 import br.gov.serpro.rtc.api.model.input.basecalculo.BaseCalculoUnificadaNfseInput;
+import br.gov.serpro.rtc.domain.service.basecalculo.BaseCalculoService;
 import br.gov.serpro.rtc.domain.service.basecalculo.BaseCalculoUnificadaNfseService;
 import br.gov.serpro.rtc.domain.service.basecalculo.BaseCalculoUnificadaService;
 import jakarta.validation.Validation;
@@ -31,6 +33,7 @@ class CalculoBaseServiceTest {
     @BeforeAll
     static void criar() {
         service = new CalculoBaseService(new BaseCalculoUnificadaService(), new BaseCalculoUnificadaNfseService(),
+                new BaseCalculoService(),
                 Validation.buildDefaultValidatorFactory().getValidator(), "9.9.9", "https://erros.exemplo");
     }
 
@@ -57,6 +60,7 @@ class CalculoBaseServiceTest {
         assertThat(r.processadoEm()).isNotNull();
         assertThat(r.tipo()).isEqualTo(TipoBaseCalculo.UNIFICADA);
         assertThat(r.resultadoNfse()).isNull();
+        assertThat(r.resultadoIs()).isNull();
     }
 
     @Test
@@ -169,6 +173,70 @@ class CalculoBaseServiceTest {
             assertThat(e.code()).isEqualTo("REG-024");
             assertThat(e.pointer()).isEqualTo("#/locacao");
         });
+    }
+
+    // ─── IS sobre mercadorias: algoritmo oficial do endpoint is-mercadorias ──────
+
+    @Test
+    void isMercadoriasCalculaComOAlgoritmoOficial() {
+        // primeiro teste oficial: 100 + 10 (acréscimos) + 5 (juros) - 15 (ICMS)
+        final ResultadoBaseCalculo r = service.calcular(pedidoIs(Map.of("anoFatoGerador", 2027, "valorBem", "100.00",
+                "ajusteAcrescimos", "10.00", "juros", "5.00", "icms", "15.00")));
+
+        assertThat(r.status()).isEqualTo(ResultadoBaseCalculo.Status.SUCESSO);
+        assertThat(r.tipo()).isEqualTo(TipoBaseCalculo.IS_MERCADORIAS);
+        assertThat(r.erros()).isNull();
+        assertThat(r.resultado()).isNull();
+        assertThat(r.resultadoNfse()).isNull();
+        assertThat(r.resultadoIs().getBaseCalculo()).isEqualByComparingTo("100.00");
+        assertThat(r.idCalculo()).isEqualTo("is-1");
+    }
+
+    @Test
+    void isAntesDe2027ApontaParaOAno() {
+        final ResultadoBaseCalculo r = service.calcular(pedidoIs(Map.of("anoFatoGerador", 2026, "valorBem", "100.00")));
+
+        assertThat(r.status()).isEqualTo(ResultadoBaseCalculo.Status.ERRO);
+        assertThat(r.resultadoIs()).isNull();
+        assertThat(r.erros()).singleElement().satisfies(e -> {
+            assertThat(e.code()).isEqualTo("REG-024");
+            assertThat(e.pointer()).isEqualTo("#/anoFatoGerador");
+            assertThat(e.detail()).contains("2027");
+        });
+    }
+
+    @Test
+    void isComIcmsAPartirDe2033EhRecusado() {
+        final ResultadoBaseCalculo r = service.calcular(pedidoIs(Map.of("anoFatoGerador", 2033, "valorBem", "100.00",
+                "icms", "10.00")));
+
+        assertThat(r.status()).isEqualTo(ResultadoBaseCalculo.Status.ERRO);
+        assertThat(r.erros()).singleElement().satisfies(e -> {
+            assertThat(e.code()).isEqualTo("REG-024");
+            assertThat(e.detail()).contains("2033", "ICMS");
+        });
+    }
+
+    @Test
+    void isComBaseNegativaEhRecusado() {
+        final ResultadoBaseCalculo r = service.calcular(pedidoIs(Map.of("anoFatoGerador", 2027, "valorBem", "10.00",
+                "descontoIncondicional", "20.00")));
+
+        assertThat(r.status()).isEqualTo(ResultadoBaseCalculo.Status.ERRO);
+        assertThat(r.erros()).singleElement().satisfies(e -> assertThat(e.detail()).contains("negativa"));
+    }
+
+    @Test
+    void isComValorNegativoViraErroDeValidacao() {
+        final ResultadoBaseCalculo r = service.calcular(pedidoIs(Map.of("anoFatoGerador", 2027, "valorBem", "-1")));
+
+        assertThat(r.status()).isEqualTo(ResultadoBaseCalculo.Status.ERRO);
+        assertThat(r.erros()).extracting(ErroDetalhe::pointer).containsExactly("#/valorBem");
+    }
+
+    private static BaseCalculoISMercadoriasEntrada pedidoIs(Map<String, Object> payload) {
+        return new BaseCalculoISMercadoriasEntrada("1", UUID.randomUUID(), "11222333000181", "is-1", "lote", null,
+                MAPPER.convertValue(payload, BaseCalculoISMercadoriasInput.class));
     }
 
     private static BaseCalculoNfseEntrada pedidoNfse(Map<String, Object> payload) {
