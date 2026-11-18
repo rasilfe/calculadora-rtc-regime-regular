@@ -2,7 +2,6 @@ package br.gov.serpro.rtc.domain.repository;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.List;
 import java.util.Optional;
 
 import org.springframework.cache.annotation.Cacheable;
@@ -23,8 +22,4 @@ public interface TransferenciaCBSRepository extends JpaRepository<TransferenciaC
     @Query("SELECT valor FROM TransferenciaCBS WHERE inicioVigencia <= :data AND (fimVigencia IS NULL OR fimVigencia >= :data)")
     @Cacheable(cacheNames = "TransferenciaCBSRepository.getPercentualTransferencia")
     Optional<BigDecimal> getPercentualTransferencia(@Param("data") LocalDate data);
-
-    @Query("SELECT t FROM TransferenciaCBS t ORDER BY t.inicioVigencia ASC")
-    @Cacheable(cacheNames = "TransferenciaCBSRepository.buscarTodos")
-    List<TransferenciaCBS> buscarTodos();
 }

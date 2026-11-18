@@ -1,0 +1,148 @@
+name: Deploy
+
+# main      -> CI -> imagem no GHCR -> homologação (automático)
+# tag v*    -> CI -> imagem no GHCR -> produção (aprovação no environment "producao")
+#
+# O deploy roda em runners self-hosted dentro da rede de cada cluster k3s, com os
+# labels [self-hosted, k3s, <ambiente>] e kubectl configurado com a ServiceAccount
+# rtc-deployer (k8s/deploy/rbac.yaml). Configuração: k8s/README.md, seção "CI/CD".
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+    paths-ignore: [ '**.md', 'docs/**' ]
+  workflow_dispatch:
+    inputs:
+      ambiente:
+        description: Ambiente de destino
+        type: choice
+        options: [ homologacao, producao ]
+        default: homologacao
+
+# Um deploy por ambiente de cada vez; nunca cancela um deploy em andamento.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    with:
+      construir-imagem: false   # a imagem é construída e publicada abaixo
+    permissions:
+      contents: read
+      pull-requests: write
+
+  imagem:
+    name: Publicar imagem no GHCR
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      imagem: ${{ steps.nome.outputs.imagem }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Nome da imagem
+        id: nome
+        # GHCR exige o nome em minúsculas
+        run: echo "imagem=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/calculadora-rtc-worker" >> "$GITHUB_OUTPUT"
+
+      - name: Versão da tag confere com o pom.xml
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          POM=$(python3 -c "import xml.etree.ElementTree as E; print(E.parse('pom.xml').getroot().find('{http://maven.apache.org/POM/4.0.0}version').text)")
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "pom.xml: $POM | tag: $TAG"
+          if [ "$POM" != "$TAG" ]; then
+            echo "::error::A tag ${GITHUB_REF_NAME} não corresponde à versão do pom.xml (${POM})"
+            exit 1
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tags e labels
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.nome.outputs.imagem }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=homologacao,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build e push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      - name: Resumo
+        run: |
+          {
+            echo "### Imagem publicada"
+            echo ""
+            echo "\`${{ steps.nome.outputs.imagem }}@${{ steps.build.outputs.digest }}\`"
+            echo ""
+            echo '${{ steps.meta.outputs.tags }}' | sed 's/^/- /'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  homologacao:
+    name: Deploy em homologação
+    needs: imagem
+    if: >-
+      github.ref == 'refs/heads/main' ||
+      (github.event_name == 'workflow_dispatch' && inputs.ambiente == 'homologacao')
+    runs-on: [ self-hosted, k3s, homologacao ]
+    environment:
+      name: homologacao
+    concurrency:
+      group: deploy-homologacao
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/deploy-k3s
+        with:
+          imagem: ${{ needs.imagem.outputs.imagem }}
+          digest: ${{ needs.imagem.outputs.digest }}
+
+  producao:
+    name: Deploy em produção
+    needs: imagem
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.ambiente == 'producao')
+    runs-on: [ self-hosted, k3s, producao ]
+    # Configure "Required reviewers" no environment "producao" para exigir aprovação.
+    environment:
+      name: producao
+    concurrency:
+      group: deploy-producao
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/deploy-k3s
+        with:
+          imagem: ${{ needs.imagem.outputs.imagem }}
+          digest: ${{ needs.imagem.outputs.digest }}

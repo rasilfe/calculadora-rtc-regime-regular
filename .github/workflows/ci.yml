@@ -1,0 +1,143 @@
+name: CI
+
+# Testes, cobertura, coerência das migrações, validação dos manifestos k3s e build da imagem.
+# Também é chamado pelo deploy.yml (workflow_call), para que o deploy só aconteça depois
+# do CI passar no mesmo commit.
+# Na main, o CI roda dentro do deploy.yml (que publica a imagem e faz o deploy).
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      construir-imagem:
+        description: Faz o build (sem push) da imagem Docker
+        type: boolean
+        default: true
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  pull-requests: write   # comentário de cobertura no PR
+
+env:
+  JAVA_VERSION: '25'
+
+jobs:
+  migracoes:
+    name: Migrações PostgreSQL em dia com o upstream
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+      # As migrações PostgreSQL (src/main/resources/db/postgres) são geradas a partir das
+      # migrações SQLite do upstream (flyway/sql). Falha se alguém mesclar migrações novas
+      # do upstream sem regenerar. Linhas de VERSAO_BASE_DADO são ignoradas: algumas
+      # migrações do upstream gravam a data de build com datetime('now').
+      - name: Regenerar e comparar
+        run: |
+          mkdir -p ./calculadora/db
+          ./mvnw -B -ntp -q flyway:migrate -Dflyway.configFiles=./flyway/flyway-pro.conf
+          python3 -I flyway/postgres/gerar_migracao_postgres.py calculadora/db/calculadora-pro.db
+          if ! git diff --exit-code \
+              -I "^\([0-9]+, '[0-9]{4}-[0-9]{2}-[0-9]{2}', '.*', '[vV]?[0-9.]+'\)[,;]$" \
+              -- src/main/resources/db/postgres; then
+            echo "::error::Migrações PostgreSQL desatualizadas. Rode flyway/postgres/gerar_migracao_postgres.py (ver flyway/postgres/README.md)."
+            exit 1
+          fi
+
+  testes:
+    name: Testes e cobertura
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # comparação de cobertura nas linhas alteradas
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: maven
+      # PostgreSQL embarcado e broker AMQP em memória: não precisa de serviços nem Docker.
+      - name: Build e testes
+        run: ./mvnw -B -ntp clean org.jacoco:jacoco-maven-plugin:prepare-agent verify
+      - name: Relatórios dos testes
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorios-surefire
+          path: target/surefire-reports/
+          retention-days: 7
+      - name: Relatório de cobertura
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco
+          path: target/site/jacoco/
+          retention-days: 7
+      - name: Comentário de cobertura no PR
+        if: success() && github.event_name == 'pull_request'
+        uses: madrapps/jacoco-report@v1.6.1
+        continue-on-error: true
+        with:
+          paths: ${{ github.workspace }}/target/site/jacoco/jacoco.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          min-coverage-overall: 80
+          min-coverage-changed-lines: 80
+          title: 📊 Calculadora de Tributos - Cobertura (JaCoCo)
+          update-comment: true
+          coverage-counter-type: LINE
+          show-missing-lines: true
+
+  manifestos:
+    name: Manifestos k3s
+    runs-on: ubuntu-latest
+    env:
+      KUBECONFORM_VERSION: v0.6.7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar kubeconform
+        run: |
+          curl -sSfL -o /tmp/kubeconform.tar.gz \
+            "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz"
+          tar -xzf /tmp/kubeconform.tar.gz -C /usr/local/bin kubeconform
+      - name: Validar schemas (incluindo CRDs do RabbitMQ e do KEDA)
+        run: |
+          set -euo pipefail
+          CATALOGO='https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+          valida() { kubeconform -strict -summary -schema-location default -schema-location "$CATALOGO" "$@"; }
+          kubectl kustomize k8s/ > /tmp/base.yaml
+          valida /tmp/base.yaml
+          valida k8s/00-namespace.yaml k8s/deploy/rbac.yaml k8s/migracao/job.yaml k8s/consumidor/scaledobject-exemplo.yaml
+          # modelo de empresa renderizado com um CNPJ numérico e um alfanumérico
+          ./k8s/empresas/gerar-empresa.sh 11.222.333/0001-81 > /tmp/empresa-num.yaml
+          ./k8s/empresas/gerar-empresa.sh 12.ABC.345/01DE-35 > /tmp/empresa-alfa.yaml
+          valida /tmp/empresa-num.yaml /tmp/empresa-alfa.yaml
+          # o gerador recusa CNPJ com dígito verificador errado
+          if ./k8s/empresas/gerar-empresa.sh 11222333000182 > /dev/null 2>&1; then
+            echo "::error::gerar-empresa.sh aceitou CNPJ inválido"; exit 1
+          fi
+      - name: ShellCheck
+        run: shellcheck k8s/empresas/gerar-empresa.sh
+
+  imagem:
+    name: Build da imagem (sem publicar)
+    # Em push/PR o input não existe (nulo); o deploy chama com false porque publica a imagem.
+    if: ${{ inputs.construir-imagem != false }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

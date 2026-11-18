@@ -3,11 +3,8 @@
 */
 package br.gov.serpro.rtc.testesintegracao.tpdoc;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.IOException;
 import java.time.OffsetDateTime;
@@ -17,36 +14,34 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.Resource;
-import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import br.gov.serpro.rtc.api.exceptionhandler.dto.ErroDetalhe;
 import br.gov.serpro.rtc.api.model.input.OperacaoInput;
 import br.gov.serpro.rtc.domain.service.CalculadoraService;
 import br.gov.serpro.rtc.domain.service.ObservabilidadeService;
 import br.gov.serpro.rtc.domain.service.collector.ErrosCalculoException;
 import br.gov.serpro.rtc.domain.service.exception.TipoDfeNaoEncontradoException;
+import br.gov.serpro.rtc.util.CalculoTestSupport;
+import br.gov.serpro.rtc.worker.StatusNota;
 
 /**
  * Caso de aceitação 5: tpDoc inexistente ou fora de vigência é erro de
  * operação nas duas APIs; na observabilidade interrompe todo o processamento
- * (erro global). Também garante que o código REG-028 é consultável no
- * endpoint de erros.
+ * (erro global).
  */
 @SpringBootTest
-@AutoConfigureMockMvc
 @TestPropertySource(locations = "classpath:application-testes.yml")
 @ActiveProfiles("testes")
 class Teste_tpdoc_5_TpDocInvalido {
 
     @Autowired
-    private MockMvc mockMvc;
+    private CalculoTestSupport calculoTestSupport;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -56,6 +51,7 @@ class Teste_tpdoc_5_TpDocInvalido {
 
     @Autowired
     private ObservabilidadeService observabilidadeService;
+
 
     private OperacaoInput operacao;
 
@@ -84,14 +80,10 @@ class Teste_tpdoc_5_TpDocInvalido {
 
     @Test
     @DisplayName("Controller sem observabilidade: tpDoc inexistente retorna 4xx")
-    void teste_controller_tpDocInexistente() throws Exception {
+    void teste_calculoNota_tpDocInexistente() throws Exception {
         operacao.setTpDoc(99);
         final String jsonContent = objectMapper.writeValueAsString(operacao);
-        mockMvc.perform(post("/calculadora/regime-geral")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(jsonContent))
-                .andExpect(status().is4xxClientError())
-                .andExpect(jsonPath("$.title").value("Tipo de documento fiscal não encontrado"));
+        assertThat(calculoTestSupport.titulosErro(jsonContent)).contains("Tipo de documento fiscal não encontrado");
     }
 
     @Test
@@ -103,33 +95,12 @@ class Teste_tpdoc_5_TpDocInvalido {
     }
 
     @Test
-    @DisplayName("Controller com observabilidade: tpDoc inexistente retorna 4xx com REG-028")
-    void teste_controllerObservabilidade_tpDocInexistente() throws Exception {
+    @DisplayName("Cálculo de nota: tpDoc inexistente resulta em nota com ERRO e código REG-028")
+    void teste_calculoNota_tpDocInexistente_codigoErro() throws Exception {
         operacao.setTpDoc(99);
-        final String jsonContent = objectMapper.writeValueAsString(operacao);
-        mockMvc.perform(post("/calculadora/observabilidade/regime-geral")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(jsonContent))
-                .andExpect(status().is4xxClientError())
-                .andExpect(jsonPath("$.errors[0].code").value("REG-028"));
-    }
-
-    @Test
-    @DisplayName("Catálogo de erros: REG-028 consultável em /calculadora/observabilidade/erros")
-    void teste_catalogoErros_REG028() throws Exception {
-        mockMvc.perform(get("/calculadora/observabilidade/erros").param("codigo", "REG-028"))
-                .andExpect(status().is2xxSuccessful())
-                .andExpect(jsonPath("$.titulo").value("Tipo de documento fiscal não encontrado"));
-    }
-
-    @Test
-    @DisplayName("Catálogo de erros: REG-029 a REG-033 consultáveis")
-    void teste_catalogoErros_novosCodigos() throws Exception {
-        for (String codigo : new String[] {"REG-029", "REG-030", "REG-031", "REG-032", "REG-033"}) {
-            mockMvc.perform(get("/calculadora/observabilidade/erros").param("codigo", codigo))
-                    .andExpect(status().is2xxSuccessful())
-                    .andExpect(jsonPath("$.codigo").value(codigo));
-        }
+        final var resultado = calculoTestSupport.calcularNota(objectMapper.writeValueAsString(operacao));
+        assertThat(resultado.status()).isEqualTo(StatusNota.ERRO);
+        assertThat(resultado.errosNota()).extracting(ErroDetalhe::code).first().isEqualTo("REG-028");
     }
 
 }

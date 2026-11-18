@@ -3,14 +3,10 @@
  */
 package br.gov.serpro.rtc.api.exceptionhandler.enumeration;
 
-import java.net.URI;
 import java.util.Optional;
 import java.util.stream.Stream;
 
-import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
-
 import br.gov.serpro.rtc.api.exceptionhandler.dto.CodigoErro;
-import br.gov.serpro.rtc.api.util.HttpUtils;
 import br.gov.serpro.rtc.domain.model.enumeration.EstadoItemEnum;
 import br.gov.serpro.rtc.domain.service.exception.AliquotaAdRemNaoEncontradaException;
 import br.gov.serpro.rtc.domain.service.exception.AliquotaImpostoSeletivoNaoInformadaException;
@@ -25,7 +21,6 @@ import br.gov.serpro.rtc.domain.service.exception.BaseCalculoInconsistenteExcept
 import br.gov.serpro.rtc.domain.service.exception.BaseCalculoMenorBaseCalculoImpostoSeletivoException;
 import br.gov.serpro.rtc.domain.service.exception.BaseCalculoNaoInformadaException;
 import br.gov.serpro.rtc.domain.service.exception.CampoInvalidoException;
-import br.gov.serpro.rtc.domain.service.exception.CaptchaException;
 import br.gov.serpro.rtc.domain.service.exception.ClassificacaoTributariaNaoEncontradaException;
 import br.gov.serpro.rtc.domain.service.exception.ClassificacaoTributariaNaoVinculadaSituacaoTributariaException;
 import br.gov.serpro.rtc.domain.service.exception.ClassificacaoTributariaNaoVinculadaTipoDfeException;
@@ -34,7 +29,6 @@ import br.gov.serpro.rtc.domain.service.exception.ErroAvaliadorExpressaoAritmeti
 import br.gov.serpro.rtc.domain.service.exception.ErroFaltaImplementacaoException;
 import br.gov.serpro.rtc.domain.service.exception.ErroGenericoValidacaoException;
 import br.gov.serpro.rtc.domain.service.exception.ErroInternoSistemaException;
-import br.gov.serpro.rtc.domain.service.exception.ErroXmlException;
 import br.gov.serpro.rtc.domain.service.exception.FormaAplicacaoNaoDefinidaException;
 import br.gov.serpro.rtc.domain.service.exception.FundamentacaoClassificacaoNaoEncontradaException;
 import br.gov.serpro.rtc.domain.service.exception.ImpostoSeletivoInformadoIndevidamenteException;
@@ -56,7 +50,6 @@ import br.gov.serpro.rtc.domain.service.exception.NomenclaturaIncompativelTipoDf
 import br.gov.serpro.rtc.domain.service.exception.NomenclaturaNaoPermitidaTipoDfeException;
 import br.gov.serpro.rtc.domain.service.exception.NomenclaturaObrigatoriaNaoInformadaException;
 import br.gov.serpro.rtc.domain.service.exception.PercentualReducaoNaoEncontradoException;
-import br.gov.serpro.rtc.domain.service.exception.PlataformaDownloadNaoEncontradaException;
 import br.gov.serpro.rtc.domain.service.exception.SiglaDFeNaoEncontradaException;
 import br.gov.serpro.rtc.domain.service.exception.TipoDfeNaoEncontradoException;
 import br.gov.serpro.rtc.domain.service.exception.SituacaoTributariaNaoEncontradaException;
@@ -335,23 +328,11 @@ public enum ProblemType {
     FORMA_APLICACAO_NAO_DEFINIDA(FormaAplicacaoNaoDefinidaException.class,
             "Forma de Aplicação de Percentual não definida", "forma-aplicacao-percentual-nao-definida"),
 
-    ERRO_XML(ErroXmlException.class,
-            "Erro de validação de XML", "erro-xml"),
-
     ERRO_NEGOCIO(NegocioException.class,
             "Violação de regra de negócio", "erro-negocio"),
 
-    ERRO_CAPTCHA(CaptchaException.class,
-            "Erro de Captcha", "erro-captcha"),
-
-    METHOD_ARGUMENT_TYPE_MISMATCH(MethodArgumentTypeMismatchException.class,
-            "Tipo de argumento inválido", "tipo-argumento-invalido"),
-
     SIGLA_DFE_NAO_ENCONTRADA(SiglaDFeNaoEncontradaException.class,
             "Sigla DFe não reconhecida", "sigla-dfe-nao-reconhecida"),
-
-    PLATAFORMA_DOWNLOAD_NAO_ENCONTRADA(PlataformaDownloadNaoEncontradaException.class,
-            "Plataforma de download não encontrada", "plataforma-download-nao-encontrada"),
 
     ERRO_SISTEMA(Exception.class,
             "Erro de sistema não previsto", "erro-de-sistema-nao-previsto");
@@ -372,10 +353,6 @@ public enum ProblemType {
         this.path = path;
         this.codigoErro = codigoErro;
         this.descricao = descricao;
-    }
-
-    public URI getURI() {
-        return URI.create(String.format("%s/errors/%s", HttpUtils.getBaseURL(), path));
     }
 
     public static <E extends Exception> ProblemType from(@NonNull final E e) {

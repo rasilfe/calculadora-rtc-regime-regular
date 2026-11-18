@@ -1,0 +1,58 @@
+# Escalonamento do worker pela profundidade da Fila de Entrada (KEDA).
+#
+# Conta: com value=500, 8.000 notas na fila pedem 16 réplicas (limitadas a maxReplicaCount).
+# minReplicaCount=2 mantém pods quentes: subir uma JVM e aquecer o cache leva 15-30 s,
+# o que consumiria a meta de processar a rodada em segundos.
+# cooldownPeriod só vale para escalar a zero; com minReplicaCount > 0 quem manda é o
+# "behavior" do HPA abaixo.
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: rtc-rabbitmq-keda
+  namespace: rtc
+spec:
+  secretTargetRef:
+    - parameter: username
+      name: rtc-keda-user-credentials
+      key: username
+    - parameter: password
+      name: rtc-keda-user-credentials
+      key: password
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: rtc-worker
+  namespace: rtc
+spec:
+  scaleTargetRef:
+    name: rtc-worker
+  minReplicaCount: 2
+  maxReplicaCount: 12
+  pollingInterval: 5
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+            - type: Percent
+              value: 200
+              periodSeconds: 15
+        scaleDown:
+          stabilizationWindowSeconds: 180
+          policies:
+            - type: Pods
+              value: 2
+              periodSeconds: 60
+  triggers:
+    - type: rabbitmq
+      authenticationRef:
+        name: rtc-rabbitmq-keda
+      metadata:
+        protocol: http
+        host: http://rtc-rabbit.rtc.svc:15672
+        vhostName: rtc
+        queueName: rtc.calculo.entrada
+        mode: QueueLength
+        value: "500"

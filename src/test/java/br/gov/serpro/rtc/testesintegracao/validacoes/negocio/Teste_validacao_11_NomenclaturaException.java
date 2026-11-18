@@ -4,8 +4,6 @@
 package br.gov.serpro.rtc.testesintegracao.validacoes.negocio;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.IOException;
 
@@ -14,18 +12,16 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.Resource;
-import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import br.gov.serpro.rtc.api.model.input.OperacaoInput;
 import br.gov.serpro.rtc.domain.service.CalculadoraService;
+import br.gov.serpro.rtc.util.CalculoTestSupport;
 
 /**
  * Regressão da abolição da coluna CLTR_NOMENCLATURA nas validações
@@ -35,13 +31,12 @@ import br.gov.serpro.rtc.domain.service.CalculadoraService;
  * (NCM_APLICAVEL/NBS_APLICAVEL) e, com tpDoc, pela NomenclaturaService.
  */
 @SpringBootTest
-@AutoConfigureMockMvc
 @TestPropertySource(locations = "classpath:application-testes.yml")
 @ActiveProfiles("testes")
 class Teste_validacao_11_NomenclaturaException {
 
     @Autowired
-    private MockMvc mockMvc;
+    private CalculoTestSupport calculoTestSupport;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -66,12 +61,9 @@ class Teste_validacao_11_NomenclaturaException {
     }
 
     @Test
-    void teste_controller_CalcularTributos() throws Exception {
+    void teste_regimeGeral_CalcularTributos() throws Exception {
         final String jsonContent = objectMapper.writeValueAsString(operacao);
-        mockMvc.perform(post("/calculadora/regime-geral")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(jsonContent))
-                .andExpect(status().is2xxSuccessful());
+        assertThatCode(() -> calculoTestSupport.regimeGeral(jsonContent)).doesNotThrowAnyException();
     }
 
 }

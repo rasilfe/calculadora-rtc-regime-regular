@@ -1,158 +1,104 @@
-# Calculadora de Tributos
+# Calculadora de Tributos — worker de filas
 
 ## Descrição do Projeto
 
-API REST que realiza o cálculo da CBS, do IBS e do Imposto Seletivo (Reforma Tributária do Consumo — LC 214/2025) nas operações do regime geral, consulta as tabelas oficiais usadas no cálculo e gera e valida os grupos de tributação dos documentos fiscais eletrônicos.
+Calcula a CBS, o IBS e o Imposto Seletivo (Reforma Tributária do Consumo — LC 214/2025) nas
+operações do regime geral, em um **pipeline orientado a eventos** para alto volume e
+**multiempresa**:
+
+```
+empresa --nota.<CNPJ>--> RabbitMQ (rtc.calculo.entrada) --> worker de cálculo
+worker --resultado.<CNPJ>--> RabbitMQ (rtc.calculo.saida.<CNPJ>) --> empresa
+```
+
+- Uma mensagem = uma nota fiscal completa. Cada item é calculado de forma isolada: erro em um
+  item não interrompe os demais (status da nota `SUCESSO`, `PARCIAL` ou `ERRO`).
+- As regras de cálculo são as do projeto original da Receita Federal, sem alteração; a API HTTP
+  foi removida e o cálculo é exposto pelo worker.
+- A base de regras fica em **PostgreSQL**, com cache em memória (Caffeine).
+- Escala horizontalmente no k3s com **KEDA**, pela profundidade da fila de entrada.
+
+Referência de vazão (uma JVM, 16 CPUs, 8 consumidores): **8.000 notas / 70.000 itens em ~3 s**
+(`CalculoNotaBenchmarkTest`).
 
 ---
 
-## Público-Alvo
+## Documentação
 
-- Empresas de tecnologia
-- Desenvolvedores
-- Contribuintes em geral
-
----
-
-## Funcionalidades
-
-Todos os caminhos começam com `http://localhost:8080/api/calculadora`. A lista completa, com esquemas e exemplos, está no Swagger (`http://localhost:8080/api/swagger-ui.html`).
-
-| Funcionalidade | Endpoint |
+| Assunto | Onde |
 |---|---|
-| Cálculo de tributos (a operação inteira falha no primeiro erro) | `POST /regime-geral` |
-| Cálculo com observabilidade (erros por item, sem interromper os demais) | `POST /observabilidade/regime-geral` |
-| Descrição de um código de erro da observabilidade | `GET /observabilidade/erros?codigo=REG-011` |
-| Base de cálculo unificada da NF-e/NFC-e | `POST /base-calculo/base-calculo-unificada` |
-| Base de cálculo unificada da NFS-e | `POST /base-calculo/base-calculo-unificada-nfse` |
-| Geração do XML a partir do resultado do cálculo | `POST /xml/generate?tipo=nfe` |
-| Validação de XML (grupo ou nota) contra o XSD | `POST /xml/validate?tipo=nfe&subtipo=grupo` |
-| CST e classificações tributárias (cClassTrib) | `GET /dados-abertos/situacoes-tributarias/cbs-ibs`, `GET /dados-abertos/classificacoes-tributarias/...` |
-| Fundamentações legais | `GET /dados-abertos/fundamentacoes-legais` |
-| NCM e NBS | `GET /dados-abertos/ncm`, `GET /dados-abertos/nbs` |
-| Alíquotas de referência (União, UF e município) | `GET /dados-abertos/aliquota-uniao`, `/aliquota-uf`, `/aliquota-municipio` |
-
-Exemplos de utilização da API estão em [docs/exemplos.md](docs/exemplos.md).
+| Implantação no k3s, contrato das mensagens, cadastro de empresas, garantias e observabilidade | [k8s/README.md](k8s/README.md) |
+| Base de regras em PostgreSQL e atualização a cada release do upstream | [flyway/postgres/README.md](flyway/postgres/README.md) |
 
 ---
 
 ## Requisitos
 
-### Requisitos do Sistema
+- **Java 25** (LTS)
+- **Maven**: não precisa ser instalado; use o Maven Wrapper (`mvnw` / `mvnw.cmd`)
+- **Python 3**: só para regenerar as migrações PostgreSQL
+- Para executar: PostgreSQL, RabbitMQ 4.x e Redis (opcional)
 
-- **Java**: versão 21 ou superior
-- **Maven**: não precisa ser instalado; o Maven Wrapper (`mvnw` / `mvnw.cmd`) baixa a versão necessária na primeira execução (requer internet)
-- **Git**: para clonar o repositório
-- **Sistema Operacional**: Windows, macOS ou Linux
-
-### Dependências Principais
-
-O projeto utiliza as seguintes tecnologias:
-
-- **Spring Boot 3.5.16**: Framework principal da aplicação web
-- **SQLite**: Banco de dados embarcado
-- **Flyway**: Migração e versionamento do banco de dados
-- **OpenAPI / Springdoc 2.8.9**: Documentação interativa da API
+Principais tecnologias: Spring Boot 3.5, Spring AMQP, PostgreSQL + Flyway, Caffeine, Redis,
+Micrometer (Prometheus e OpenTelemetry).
 
 ---
 
-## Instruções de Instalação
-
-### 1. Pré-requisitos
-
-Certifique-se de ter instalado o Java 21 ou superior e verifique as versões:
-
-```bash
-# Verificar versão do Java
-java -version
-```
-
-### 2. Clonar o Repositório
-
-```bash
-git clone https://github.com/ReceitaFederal/calculadora-rtc-regime-regular.git
-cd calculadora-rtc-regime-regular
-```
-
-### 3. Gerar o Banco de Dados (obrigatório)
-
-O perfil `offline` lê o banco `./calculadora/db/calculadora-pro.db`, definido por `application.db.filename` em `application-offline.yml`. O caminho é relativo à raiz do projeto e o banco é aberto em modo somente leitura.
-
-> **Atenção:** a aplicação só funciona se o banco estiver gerado. Sem ele, o perfil offline não inicia.
-
-Execute a partir da raiz do projeto.
-
-**Linux/macOS:**
-
-```bash
-mkdir -p ./calculadora/db
-./mvnw flyway:migrate -Dflyway.configFiles=./flyway/flyway-pro.conf --batch-mode --errors
-```
-
-**Windows:**
-
-```bat
-mkdir calculadora\db
-mvnw.cmd flyway:migrate -Dflyway.configFiles=flyway\flyway-pro.conf --batch-mode --errors
-```
-
-Confirme que o arquivo foi criado com `ls -lah ./calculadora/db/calculadora-pro.db` (Linux/macOS) ou `dir calculadora\db\calculadora-pro.db` (Windows).
-
-### 4. Compilar e Executar os Testes
-
-Os testes exigem o banco gerado no passo 3, pois a maioria são testes de integração com o perfil `testes`.
-
-Executar todos os testes com relatório de cobertura (JaCoCo):
-
-**Linux/macOS:**
+## Compilar e testar
 
 ```bash
 ./mvnw clean test jacoco:report
 ```
 
-**Windows:**
+Os testes não precisam de serviços externos nem de Docker:
 
-```bat
-mvnw.cmd clean test jacoco:report
-```
+- **PostgreSQL embarcado** (Zonky): as migrações de `src/main/resources/db/postgres` são
+  aplicadas automaticamente;
+- **broker AMQP em memória** (rabbitmq-mock) no teste ponta a ponta do worker
+  (`WorkerPontaAPontaTest`);
+- os manifestos de `k8s/` são validados por `ManifestosK8sTest`.
 
-O relatório de cobertura fica em `target/site/jacoco/index.html`.
-
-### 5. Executar a Aplicação com perfil Offline (spring-boot:run)
-
-**Linux/macOS:**
+Benchmark de vazão (fora do build padrão; relatório em `target/benchmark/calculo-nota.txt`):
 
 ```bash
-./mvnw spring-boot:run -Dspring-boot.run.profiles=offline
+./mvnw test -Dsurefire.excludedGroups=nenhum -Dgroups=benchmark
 ```
 
-**Windows:**
+---
 
-```bat
-mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=offline"
-```
+## Executar localmente
 
-A aplicação estará disponível em `http://localhost:8080/api`.
-
-### 6. Gerar o JAR e Executar com java -jar (perfil offline)
-
-**Linux/macOS:**
+Com PostgreSQL, RabbitMQ e Redis acessíveis, o worker cria a topologia e migra o banco na
+primeira execução:
 
 ```bash
-./mvnw clean package
+./mvnw clean package -DskipTests
+DB_HOST=localhost DB_NAME=calculadora_pro DB_USER=calculadora DB_PASSWORD=... \
+DB_MIGRAR_NA_INICIALIZACAO=true DB_SOMENTE_LEITURA=false \
+RABBITMQ_HOST=localhost RABBITMQ_VHOST=rtc WORKER_DECLARAR_TOPOLOGIA=true \
+REDIS_HOST=localhost \
 java -Dspring.profiles.active=offline -jar target/api-regime-geral.jar
 ```
 
-**Windows:**
+Sem Redis, use `WORKER_IDEMPOTENCIA=nenhuma`. Com `WORKER_DECLARAR_TOPOLOGIA=true`, os
+resultados de todas as empresas também chegam à fila `rtc.calculo.saida.dev` (só para
+desenvolvimento). Health e métricas: `http://localhost:9101/health` e `/metrics`.
 
-```bat
-mvnw.cmd clean package
-java "-Dspring.profiles.active=offline" -jar target\api-regime-geral.jar
+Imagem para o k3s:
+
+```bash
+docker build -t calculadora-rtc-worker:local .   # no CI/CD a imagem vai para o GHCR
 ```
 
-Execute o JAR a partir da raiz do projeto, para que `./calculadora/db` seja encontrado.
-
 ---
+
+## Relação com o projeto original
+
+Este repositório deriva de
+[ReceitaFederal/calculadora-rtc-regime-regular](https://github.com/ReceitaFederal/calculadora-rtc-regime-regular).
+As migrações da base de regras publicadas pelo upstream (`flyway/sql`, dialeto SQLite)
+continuam sendo a fonte; a versão PostgreSQL é gerada a partir delas, e o CI falha se as duas
+divergirem.
 
 ## Referências
 

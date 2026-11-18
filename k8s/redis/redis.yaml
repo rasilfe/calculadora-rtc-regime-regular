@@ -1,0 +1,62 @@
+# Redis para a idempotência do worker. Guarda só marcas por correlationId com TTL;
+# sem persistência: se cair, o worker segue sem idempotência e o consumidor final
+# deduplica pela chave (idNota, correlationId).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rtc-redis
+  namespace: rtc
+  labels:
+    app.kubernetes.io/name: rtc-redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rtc-redis
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rtc-redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7.4-alpine
+          args:
+            - --save
+            - ""
+            - --appendonly
+            - "no"
+            - --maxmemory
+            - 200mb
+            - --maxmemory-policy
+            - volatile-ttl
+          ports:
+            - name: redis
+              containerPort: 6379
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 256Mi
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rtc-redis
+  namespace: rtc
+spec:
+  selector:
+    app.kubernetes.io/name: rtc-redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: redis

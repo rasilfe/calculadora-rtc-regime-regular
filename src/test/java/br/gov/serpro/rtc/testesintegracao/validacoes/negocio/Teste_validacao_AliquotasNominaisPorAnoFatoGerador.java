@@ -3,10 +3,9 @@
 */
 package br.gov.serpro.rtc.testesintegracao.validacoes.negocio;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -15,13 +14,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.Resource;
-import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -34,6 +30,7 @@ import br.gov.serpro.rtc.domain.service.CalculadoraService;
 import br.gov.serpro.rtc.domain.service.exception.AliquotaImpostoSeletivoNaoInformadaException;
 import br.gov.serpro.rtc.domain.service.exception.AliquotasNominaisInformadasIndevidamenteException;
 import br.gov.serpro.rtc.domain.service.exception.AliquotasNominaisNaoInformadasException;
+import br.gov.serpro.rtc.util.CalculoTestSupport;
 
 /**
  * Validações das alíquotas nominais por ano do fato gerador:
@@ -51,13 +48,12 @@ import br.gov.serpro.rtc.domain.service.exception.AliquotasNominaisNaoInformadas
  * alíquotas nominais de CBS/IBS preenchidas.
  */
 @SpringBootTest
-@AutoConfigureMockMvc
 @TestPropertySource(locations = "classpath:application-testes.yml")
 @ActiveProfiles("testes")
 class Teste_validacao_AliquotasNominaisPorAnoFatoGerador {
 
     @Autowired
-    private MockMvc mockMvc;
+    private CalculoTestSupport calculoTestSupport;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -116,14 +112,10 @@ class Teste_validacao_AliquotasNominaisPorAnoFatoGerador {
     }
 
     @Test
-    void deveCriticarAliquotasNominaisInformadasAte2026ViaController() throws Exception {
+    void deveCriticarAliquotasNominaisInformadasAte2026ViaCalculoNota() throws Exception {
         mudarParaFatoGerador2026();
 
-        mockMvc.perform(post("/calculadora/regime-geral")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(operacao)))
-                .andExpect(status().is4xxClientError())
-                .andExpect(jsonPath("$.title").value("Alíquotas nominais informadas indevidamente"));
+        assertThat(calculoTestSupport.titulosErro(objectMapper.writeValueAsString(operacao))).contains("Alíquotas nominais informadas indevidamente");
     }
 
     @Test
@@ -134,10 +126,7 @@ class Teste_validacao_AliquotasNominaisPorAnoFatoGerador {
         item().setAliquotasNominais(null);
         informarGrupoImpostoSeletivo();
 
-        mockMvc.perform(post("/calculadora/regime-geral")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(operacao)))
-                .andExpect(status().isOk());
+        assertThatCode(() -> calculoTestSupport.regimeGeral(objectMapper.writeValueAsString(operacao))).doesNotThrowAnyException();
     }
 
     @Test
@@ -168,14 +157,10 @@ class Teste_validacao_AliquotasNominaisPorAnoFatoGerador {
     }
 
     @Test
-    void deveCriticarAliquotaImpostoSeletivoNaoResolvivelViaController() throws Exception {
+    void deveCriticarAliquotaImpostoSeletivoNaoResolvivelViaCalculoNota() throws Exception {
         informarGrupoImpostoSeletivo();
 
-        mockMvc.perform(post("/calculadora/regime-geral")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(operacao)))
-                .andExpect(status().is4xxClientError())
-                .andExpect(jsonPath("$.title").value("Alíquota do Imposto Seletivo não informada"));
+        assertThat(calculoTestSupport.titulosErro(objectMapper.writeValueAsString(operacao))).contains("Alíquota do Imposto Seletivo não informada");
     }
 
     @Test
@@ -185,11 +170,8 @@ class Teste_validacao_AliquotasNominaisPorAnoFatoGerador {
         impostoSeletivo.setAdValorem(new BigDecimal("13.0"));
         item().getAliquotasNominais().setImpostoSeletivo(impostoSeletivo);
 
-        mockMvc.perform(post("/calculadora/regime-geral")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(objectMapper.writeValueAsString(operacao)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.objetos[0].calculoSimulado").value(true))
-                .andExpect(jsonPath("$.total").exists());
+        final String json = calculoTestSupport.regimeGeral(objectMapper.writeValueAsString(operacao));
+        CalculoTestSupport.assertJsonPath(json, "$.objetos[0].calculoSimulado", true);
+        CalculoTestSupport.assertJsonPathExists(json, "$.total");
     }
 }

@@ -2,7 +2,6 @@ package br.gov.serpro.rtc.domain.repository;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.List;
 import java.util.Optional;
 
 import org.springframework.cache.annotation.Cacheable;
@@ -24,8 +23,4 @@ public interface RedutorCompraGovernamentalRepository extends JpaRepository<Redu
     @Query("SELECT valor FROM RedutorCompraGovernamental WHERE inicioVigencia <= :data AND (fimVigencia IS NULL OR fimVigencia >= :data)")
     @Cacheable(cacheNames = "RedutorCompraGovernamentalRepository.buscarValorRedutor")
     Optional<BigDecimal> buscarValorRedutor(@Param("data") LocalDate data);
-
-    @Query("SELECT r FROM RedutorCompraGovernamental r ORDER BY r.inicioVigencia ASC")
-    @Cacheable(cacheNames = "RedutorCompraGovernamentalRepository.buscarTodos")
-    List<RedutorCompraGovernamental> buscarTodos();
 }

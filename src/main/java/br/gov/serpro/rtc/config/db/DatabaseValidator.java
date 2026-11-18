@@ -17,10 +17,10 @@ import lombok.extern.slf4j.Slf4j;
 public class DatabaseValidator {
 
     private static final String[] PRODUCTION_PROFILES = { "pro", "offline" };
-    private static final String NONPRODUCTION_DB_FILENAME_SUFFIX = "-nonpro.db";
-    private static final String PRODUCTION_DB_FILENAME_SUFFIX = "-pro.db";
+    private static final String NONPRODUCTION_DB_FILENAME_SUFFIX = "_nonpro";
+    private static final String PRODUCTION_DB_FILENAME_SUFFIX = "_pro";
 
-    @Value("${application.db.filename}")
+    @Value("${application.db.name}")
     private String dbFileName;
 
     @Autowired

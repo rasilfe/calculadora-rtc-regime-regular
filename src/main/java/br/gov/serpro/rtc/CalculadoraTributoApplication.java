@@ -5,7 +5,6 @@ package br.gov.serpro.rtc;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration;
 
 import lombok.RequiredArgsConstructor;
 
@@ -14,7 +13,7 @@ import lombok.RequiredArgsConstructor;
  * Tributos.
  */
 @RequiredArgsConstructor
-@SpringBootApplication(exclude = UserDetailsServiceAutoConfiguration.class)
+@SpringBootApplication
 public class CalculadoraTributoApplication {
     
     public static void main(String[] args) {

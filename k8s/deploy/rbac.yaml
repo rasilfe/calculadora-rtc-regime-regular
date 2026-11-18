@@ -1,0 +1,64 @@
+# Permissões do runner self-hosted do GitHub Actions (aplicar uma vez, como administrador):
+#   kubectl apply -f k8s/00-namespace.yaml -f k8s/deploy/rbac.yaml
+# O runner usa um kubeconfig com o token desta ServiceAccount (ver k8s/README.md).
+# Escopo: só o namespace rtc. Não lê Secrets além dos dois que o deploy confere.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: rtc-deployer
+  namespace: rtc
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rtc-deployer-token
+  namespace: rtc
+  annotations:
+    kubernetes.io/service-account.name: rtc-deployer
+type: kubernetes.io/service-account-token
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: rtc-deployer
+  namespace: rtc
+rules:
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: [rtc-db, rtc-db-migracao]
+    verbs: [get]
+  - apiGroups: [""]
+    resources: [services]
+    verbs: [get, list, create, update, patch]
+  - apiGroups: [""]
+    resources: [pods, pods/log, events]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets]
+    verbs: [get, list, watch, create, update, patch]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete]
+  - apiGroups: [policy]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list, create, update, patch]
+  - apiGroups: [rabbitmq.com]
+    resources: [rabbitmqclusters, vhosts, exchanges, queues, bindings, policies, users, permissions, topicpermissions]
+    verbs: [get, list, create, update, patch]
+  - apiGroups: [keda.sh]
+    resources: [scaledobjects, triggerauthentications]
+    verbs: [get, list, create, update, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: rtc-deployer
+  namespace: rtc
+subjects:
+  - kind: ServiceAccount
+    name: rtc-deployer
+    namespace: rtc
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: rtc-deployer

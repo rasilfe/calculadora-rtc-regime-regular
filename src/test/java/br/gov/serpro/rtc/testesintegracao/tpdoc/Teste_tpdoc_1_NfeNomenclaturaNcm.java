@@ -3,11 +3,9 @@
 */
 package br.gov.serpro.rtc.testesintegracao.tpdoc;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.IOException;
 
@@ -16,13 +14,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.Resource;
-import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.web.servlet.MockMvc;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -31,6 +26,7 @@ import br.gov.serpro.rtc.domain.service.CalculadoraService;
 import br.gov.serpro.rtc.domain.service.exception.NcmCompletoNaoInformadoException;
 import br.gov.serpro.rtc.domain.service.exception.NcmNaoVinculadaException;
 import br.gov.serpro.rtc.domain.service.exception.NomenclaturaIncompativelTipoDfeException;
+import br.gov.serpro.rtc.util.CalculoTestSupport;
 
 /**
  * Caso de aceitação 1: cClassTrib 200043 (anexo com NCM e NBS) com tpDoc 55
@@ -38,13 +34,12 @@ import br.gov.serpro.rtc.domain.service.exception.NomenclaturaIncompativelTipoDf
  * informada gera erro.
  */
 @SpringBootTest
-@AutoConfigureMockMvc
 @TestPropertySource(locations = "classpath:application-testes.yml")
 @ActiveProfiles("testes")
 class Teste_tpdoc_1_NfeNomenclaturaNcm {
 
     @Autowired
-    private MockMvc mockMvc;
+    private CalculoTestSupport calculoTestSupport;
 
     @Autowired
     private ObjectMapper objectMapper;
@@ -94,15 +89,11 @@ class Teste_tpdoc_1_NfeNomenclaturaNcm {
 
     @Test
     @DisplayName("Controller: NBS em NF-e retorna 4xx com título de nomenclatura incompatível")
-    void teste_controller_nbsIncompativel() throws Exception {
+    void teste_calculoNota_nbsIncompativel() throws Exception {
         operacao.getItens().get(0).setNcm(null);
         operacao.getItens().get(0).setNbs("115012000");
         final String jsonContent = objectMapper.writeValueAsString(operacao);
-        mockMvc.perform(post("/calculadora/regime-geral")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(jsonContent))
-                .andExpect(status().is4xxClientError())
-                .andExpect(jsonPath("$.title").value("Nomenclatura incompatível com o tipo de documento"));
+        assertThat(calculoTestSupport.titulosErro(jsonContent)).contains("Nomenclatura incompatível com o tipo de documento");
     }
 
 }

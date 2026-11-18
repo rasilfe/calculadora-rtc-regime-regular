@@ -25,3 +25,9 @@ replay_pid*
 
 # build
 .mirror-manifest
+
+# banco SQLite gerado localmente pelo Flyway (ver README)
+calculadora/
+
+# saída do Maven
+target/
