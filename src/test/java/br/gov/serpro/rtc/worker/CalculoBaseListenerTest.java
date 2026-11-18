@@ -23,6 +23,8 @@ import org.springframework.amqp.core.MessageProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 
+import br.gov.serpro.rtc.api.model.input.basecalculo.enumeration.SituacaoOperacaoNfse;
+
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 
 /**
@@ -56,12 +58,14 @@ class CalculoBaseListenerTest {
 
         listener.receber(mensagem(pedidoValido(), "base." + CNPJ, CNPJ), canal);
 
-        final var enviado = ArgumentCaptor.forClass(BaseCalculoEntrada.class);
+        final var enviado = ArgumentCaptor.forClass(PedidoBaseCalculo.class);
         verify(calculo).calcular(enviado.capture());
+        assertThat(enviado.getValue()).isInstanceOf(BaseCalculoEntrada.class);
         assertThat(enviado.getValue().cnpj()).isEqualTo(CNPJ);
         verify(publisher).publicarBaseConfirmado(any(ResultadoBaseCalculo.class));
         verify(canal).basicAck(TAG, false);
-        assertThat(registry.counter("rtc.worker.base", "resultado", "publicada", "status", "SUCESSO").count())
+        assertThat(registry.counter("rtc.worker.base", "resultado", "publicada", "status", "SUCESSO", "tipo", "UNIFICADA")
+                .count())
                 .isEqualTo(1);
     }
 
@@ -82,7 +86,8 @@ class CalculoBaseListenerTest {
 
         verifyNoInteractions(calculo, publisher);
         verify(canal).basicReject(TAG, false);
-        assertThat(registry.counter("rtc.worker.base", "resultado", "rejeitada_empresa", "status", "nenhum").count())
+        assertThat(registry.counter("rtc.worker.base", "resultado", "rejeitada_empresa", "status", "nenhum", "tipo", "nenhum")
+                .count())
                 .isEqualTo(1);
     }
 
@@ -114,6 +119,49 @@ class CalculoBaseListenerTest {
         verify(canal, never()).basicAck(anyLong(), anyBoolean());
     }
 
+    @Test
+    void tipoNfseVaiParaOCalculoDaNfse() throws Exception {
+        when(calculo.calcular(any())).thenReturn(resultado(ResultadoBaseCalculo.Status.SUCESSO));
+
+        listener.receber(mensagem(pedidoNfse("nfse"), "base." + CNPJ, CNPJ), canal);
+
+        final var enviado = ArgumentCaptor.forClass(PedidoBaseCalculo.class);
+        verify(calculo).calcular(enviado.capture());
+        assertThat(enviado.getValue()).isInstanceOfSatisfying(BaseCalculoNfseEntrada.class, p -> {
+            assertThat(p.cnpj()).isEqualTo(CNPJ);
+            assertThat(p.payload().getVServ()).isEqualByComparingTo("100");
+            assertThat(p.payload().getSituacao()).isEqualTo(SituacaoOperacaoNfse.COMUM);
+        });
+        verify(canal).basicAck(TAG, false);
+        assertThat(registry.counter("rtc.worker.base", "resultado", "publicada", "status", "SUCESSO", "tipo", "NFSE")
+                .count()).isEqualTo(1);
+    }
+
+    @Test
+    void tipoDesconhecidoVaiParaADlq() throws Exception {
+        listener.receber(mensagem(pedidoNfse("nfe"), "base." + CNPJ, CNPJ), canal);
+
+        verifyNoInteractions(calculo, publisher);
+        verify(canal).basicReject(TAG, false);
+    }
+
+    @Test
+    void payloadDeNfseComOpcaoSimplesInvalidaVaiParaADlq() throws Exception {
+        // como na nota, conteúdo que não converte para o contrato é mensagem ilegível
+        listener.receber(mensagem(pedidoNfse("NFSE").replace("\"opSimpNac\":1", "\"opSimpNac\":7"), "base." + CNPJ,
+                CNPJ), canal);
+
+        verifyNoInteractions(calculo, publisher);
+        verify(canal).basicReject(TAG, false);
+    }
+
+    private String pedidoNfse(String tipo) {
+        return """
+                {"schemaVersion":"1","tipo":"%s","correlationId":"%s","idCalculo":"nfse-1",
+                 "payload":{"anoFatoGerador":2026,"opSimpNac":1,"situacao":"comum","vServ":100}}
+                """.formatted(tipo, correlationId);
+    }
+
     private String pedidoValido() {
         return """
                 {"schemaVersion":"1","correlationId":"%s","idCalculo":"item-1","loteId":"l",
@@ -123,7 +171,8 @@ class CalculoBaseListenerTest {
     }
 
     private ResultadoBaseCalculo resultado(ResultadoBaseCalculo.Status status) {
-        return new ResultadoBaseCalculo("1", correlationId, CNPJ, "item-1", "l", status, "x", null, 1, null, null);
+        return new ResultadoBaseCalculo("1", correlationId, CNPJ, "item-1", "l", TipoBaseCalculo.UNIFICADA, status, "x",
+                null, 1, null, null, null);
     }
 
     private static Message mensagem(String corpo, String routingKey, String headerCnpj) {

@@ -8,6 +8,7 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 
@@ -62,7 +63,7 @@ public class CalculoBaseListener {
     public void receber(Message mensagem, Channel canal) throws IOException {
         final long tag = mensagem.getMessageProperties().getDeliveryTag();
 
-        final BaseCalculoEntrada lido = ler(mensagem);
+        final PedidoBaseCalculo lido = ler(mensagem);
         if (lido == null) {
             contar("rejeitada_ilegivel", "nenhum");
             canal.basicReject(tag, false);
@@ -78,7 +79,7 @@ public class CalculoBaseListener {
             return;
         }
         final String cnpj = empresa.cnpj().valor();
-        final BaseCalculoEntrada pedido = lido.comCnpj(cnpj);
+        final PedidoBaseCalculo pedido = lido.comCnpj(cnpj);
 
         try (var mdcEmpresa = MDC.putCloseable("cnpj", cnpj);
                 var mdcCorrelacao = MDC.putCloseable("correlationId", pedido.correlationId().toString())) {
@@ -88,7 +89,7 @@ public class CalculoBaseListener {
                 publisher.publicarBaseConfirmado(resultado);
                 canal.basicAck(tag, false);
                 amostra.stop(duracao);
-                contar("publicada", resultado.status().name());
+                contar("publicada", resultado.status().name(), pedido.tipo());
             } catch (RuntimeException e) {
                 log.warn("Falha transitória ao calcular a base; devolvendo para a fila: {}", e.toString());
                 contar("devolvida_fila", "nenhum");
@@ -97,23 +98,48 @@ public class CalculoBaseListener {
         }
     }
 
-    private BaseCalculoEntrada ler(Message mensagem) {
+    /**
+     * Lê o envelope e escolhe o contrato pelo campo {@code tipo}: ausente ou {@code UNIFICADA}
+     * para a base unificada, {@code NFSE} para a base da NFS-e. Tipo desconhecido ou JSON
+     * ilegível devolvem {@code null} (vai para a DLQ).
+     */
+    private PedidoBaseCalculo ler(Message mensagem) {
+        final String messageId = mensagem.getMessageProperties().getMessageId();
         try {
-            final BaseCalculoEntrada pedido = objectMapper.readValue(mensagem.getBody(), BaseCalculoEntrada.class);
+            final JsonNode envelope = objectMapper.readTree(mensagem.getBody());
+            if (envelope == null || !envelope.isObject()) {
+                log.error("Base de cálculo sem objeto JSON (messageId={}); enviando para a DLQ", messageId);
+                return null;
+            }
+            final JsonNode campoTipo = envelope.get("tipo");
+            final String tipoInformado = campoTipo == null || campoTipo.isNull() ? null : campoTipo.asText();
+            final var tipo = TipoBaseCalculo.doEnvelope(tipoInformado);
+            if (tipo.isEmpty()) {
+                log.error("Base de cálculo com tipo '{}' desconhecido (messageId={}); enviando para a DLQ",
+                        tipoInformado, messageId);
+                return null;
+            }
+            final PedidoBaseCalculo pedido = switch (tipo.get()) {
+                case UNIFICADA -> objectMapper.treeToValue(envelope, BaseCalculoEntrada.class);
+                case NFSE -> objectMapper.treeToValue(envelope, BaseCalculoNfseEntrada.class);
+            };
             if (pedido == null || pedido.correlationId() == null || pedido.payload() == null) {
-                log.error("Base de cálculo sem correlationId ou payload (messageId={}); enviando para a DLQ",
-                        mensagem.getMessageProperties().getMessageId());
+                log.error("Base de cálculo sem correlationId ou payload (messageId={}); enviando para a DLQ", messageId);
                 return null;
             }
             return pedido;
         } catch (IOException e) {
-            log.error("Base de cálculo ilegível (messageId={}); enviando para a DLQ: {}",
-                    mensagem.getMessageProperties().getMessageId(), e.getMessage());
+            log.error("Base de cálculo ilegível (messageId={}); enviando para a DLQ: {}", messageId, e.getMessage());
             return null;
         }
     }
 
     private void contar(String resultado, String status) {
-        registry.counter("rtc.worker.base", "resultado", resultado, "status", status).increment();
+        contar(resultado, status, null);
+    }
+
+    private void contar(String resultado, String status, TipoBaseCalculo tipo) {
+        registry.counter("rtc.worker.base", "resultado", resultado, "status", status,
+                "tipo", tipo == null ? "nenhum" : tipo.name()).increment();
     }
 }

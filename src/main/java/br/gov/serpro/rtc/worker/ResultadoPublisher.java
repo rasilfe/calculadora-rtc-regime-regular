@@ -61,6 +61,9 @@ public class ResultadoPublisher {
             headers.put("x-id-calculo", resultado.idCalculo());
         }
         headers.put("x-status", resultado.status().name());
+        if (resultado.tipo() != null) {
+            headers.put("x-tipo", resultado.tipo().name());
+        }
         publicar(resultado, resultado.correlationId().toString(), resultado.cnpj(),
                 routingKeyBaseDaEmpresa(resultado.cnpj()), headers);
     }
