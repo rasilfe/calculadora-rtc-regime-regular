@@ -1,5 +1,5 @@
 # Imagem do worker de cálculo (também usada pelo Job de migração).
-#   docker build -t registry.local/calculadora-rtc-worker:1.6.1 .
+#   docker build -t calculadora-rtc-worker:local .   (no CI/CD: .github/workflows/deploy.yml publica no GHCR)
 
 FROM eclipse-temurin:25-jdk AS build
 WORKDIR /src

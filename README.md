@@ -87,7 +87,7 @@ desenvolvimento). Health e métricas: `http://localhost:9101/health` e `/metrics
 Imagem para o k3s:
 
 ```bash
-docker build -t registry.local/calculadora-rtc-worker:1.6.1 .
+docker build -t calculadora-rtc-worker:local .   # no CI/CD a imagem vai para o GHCR
 ```
 
 ---

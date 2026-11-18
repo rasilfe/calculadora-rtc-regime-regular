@@ -1,0 +1,99 @@
+name: Deploy no k3s
+description: >
+  Aplica o Job de migração da base de regras e os manifestos de k8s/ com a imagem
+  fixada por digest, e espera o rollout do worker. Roda no runner self-hosted que
+  tem acesso ao cluster (kubectl configurado com a ServiceAccount rtc-deployer).
+
+inputs:
+  imagem:
+    description: "Imagem sem tag (ex.: ghcr.io/dono/calculadora-rtc-worker)"
+    required: true
+  digest:
+    description: "Digest da imagem publicada (sha256:...)"
+    required: true
+  namespace:
+    description: Namespace do k3s
+    required: false
+    default: rtc
+  timeout-migracao:
+    description: Tempo máximo para o Job de migração
+    required: false
+    default: 10m
+  timeout-rollout:
+    description: Tempo máximo para o rollout do worker
+    required: false
+    default: 5m
+
+runs:
+  using: composite
+  steps:
+    - name: Conferir acesso ao cluster
+      shell: bash
+      run: |
+        set -euo pipefail
+        kubectl version --client
+        kubectl -n "${{ inputs.namespace }}" auth can-i create jobs
+        kubectl -n "${{ inputs.namespace }}" auth can-i patch deployments
+        for s in rtc-db rtc-db-migracao; do
+          kubectl -n "${{ inputs.namespace }}" get secret "$s" >/dev/null \
+            || { echo "::error::Secret $s não existe no namespace ${{ inputs.namespace }} (ver k8s/README.md)"; exit 1; }
+        done
+
+    - name: Fixar a imagem por digest
+      shell: bash
+      run: |
+        set -euo pipefail
+        REF="${{ inputs.imagem }}@${{ inputs.digest }}"
+        echo "IMAGEM_REF=$REF" >> "$GITHUB_ENV"
+        # kustomization: troca newName/newTag pela imagem publicada, fixada por digest
+        sed -i -E \
+          -e "s|^(\s*newName:).*|\1 ${{ inputs.imagem }}|" \
+          -e "s|^(\s*)newTag:.*|\1digest: ${{ inputs.digest }}|" \
+          k8s/kustomization.yaml
+        sed -i -E "s|^(\s*image:) calculadora-rtc-worker\s*$|\1 $REF|" k8s/migracao/job.yaml
+        grep -n "digest:" k8s/kustomization.yaml
+        grep -n "image:" k8s/migracao/job.yaml
+
+    - name: Migrar a base de regras (Job)
+      shell: bash
+      run: |
+        set -euo pipefail
+        NS="${{ inputs.namespace }}"
+        # O template de um Job é imutável: remove a execução anterior antes de criar outra.
+        kubectl -n "$NS" delete job rtc-migracao-base --ignore-not-found --wait=true
+        kubectl -n "$NS" apply -f k8s/migracao/job.yaml
+        if ! kubectl -n "$NS" wait --for=condition=complete job/rtc-migracao-base --timeout="${{ inputs.timeout-migracao }}"; then
+          echo "::error::Job de migração não concluiu. Se as migrações foram regeneradas para uma nova versão da base, crie um banco novo e atualize os secrets (flyway/postgres/README.md)."
+          kubectl -n "$NS" logs job/rtc-migracao-base --tail=200 || true
+          exit 1
+        fi
+        kubectl -n "$NS" logs job/rtc-migracao-base --tail=20 || true
+
+    - name: Aplicar manifestos
+      shell: bash
+      run: |
+        set -euo pipefail
+        kubectl kustomize k8s/ > "$RUNNER_TEMP/manifestos.yaml"
+        grep -n "image:" "$RUNNER_TEMP/manifestos.yaml"
+        kubectl apply -f "$RUNNER_TEMP/manifestos.yaml"
+
+    - name: Aguardar rollout do worker
+      shell: bash
+      run: |
+        set -euo pipefail
+        NS="${{ inputs.namespace }}"
+        if ! kubectl -n "$NS" rollout status deployment/rtc-worker --timeout="${{ inputs.timeout-rollout }}"; then
+          echo "::error::Rollout do worker não concluiu"
+          kubectl -n "$NS" get pods -l app.kubernetes.io/name=rtc-worker -o wide || true
+          kubectl -n "$NS" describe deployment rtc-worker | tail -40 || true
+          exit 1
+        fi
+        {
+          echo "### Deploy no namespace \`$NS\`"
+          echo ""
+          echo "- Imagem: \`$IMAGEM_REF\`"
+          echo "- Pods do worker:"
+          echo '```'
+          kubectl -n "$NS" get pods -l app.kubernetes.io/name=rtc-worker -o wide
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"

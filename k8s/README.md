@@ -19,30 +19,75 @@ saída é uma por empresa. Mensagens ilegíveis ou que falham repetidamente vão
 - PostgreSQL acessível pelo cluster (gerenciado ou operador de sua escolha)
 - Opcional: coletor OTLP/Jaeger em `jaeger-collector.observability.svc:4318` e Prometheus
 
-## Ordem de implantação
+## Preparação do cluster (uma vez, pelo administrador)
 
 ```bash
-# 1. imagem (mesma para worker e migração)
-docker build -t registry.local/calculadora-rtc-worker:1.6.1 .
-docker push registry.local/calculadora-rtc-worker:1.6.1
+# namespace e permissões do runner de deploy
+kubectl apply -f k8s/00-namespace.yaml -f k8s/deploy/rbac.yaml
 
-# 2. banco: crie o database da versão da base e os dois secrets
-kubectl create namespace rtc
+# banco da versão atual da base de regras (crie o database antes) e os dois secrets
 kubectl -n rtc create secret generic rtc-db-migracao \
   --from-literal=host=<host> --from-literal=name=calculadora_pro_v0059 \
   --from-literal=user=<usuario_escrita> --from-literal=password=<senha>
-kubectl -n rtc apply -f k8s/migracao/job.yaml
-kubectl -n rtc wait --for=condition=complete job/rtc-migracao-base --timeout=10m
 kubectl -n rtc create secret generic rtc-db \
   --from-literal=host=<host> --from-literal=name=calculadora_pro_v0059 \
   --from-literal=user=<usuario_leitura> --from-literal=password=<senha>
 
-# 3. RabbitMQ, topologia, Redis, worker e KEDA
-kubectl apply -k k8s/
+# só se o pacote no GHCR for privado (token com escopo read:packages)
+kubectl -n rtc create secret docker-registry ghcr-pull \
+  --docker-server=ghcr.io --docker-username=<usuario> --docker-password=<token>
 ```
 
-O Topology Operator cria os secrets `rtc-worker-user-credentials` e
-`rtc-keda-user-credentials`.
+Depois disso, o deploy é feito pelo GitHub Actions (seção abaixo). O Topology Operator
+cria os secrets `rtc-worker-user-credentials` e `rtc-keda-user-credentials`.
+
+## CI/CD (GitHub Actions)
+
+| Workflow | Quando | O que faz |
+|---|---|---|
+| `ci.yml` | PR para a `main` | migrações PostgreSQL em dia com o upstream; testes e cobertura (comentário no PR); manifestos validados com kubeconform (inclui CRDs do RabbitMQ e do KEDA) e ShellCheck; build da imagem sem publicar |
+| `deploy.yml` | push na `main` | CI → imagem no GHCR (`sha-…`, `homologacao`) → deploy em **homologação** |
+| `deploy.yml` | tag `vX.Y.Z` | CI → confere a tag com a versão do `pom.xml` → imagem (`X.Y.Z`, `X.Y`) → deploy em **produção** após aprovação |
+
+O deploy (`.github/actions/deploy-k3s`) roda no runner do ambiente e:
+
+1. confere o acesso ao cluster e a existência dos secrets `rtc-db` e `rtc-db-migracao`;
+2. fixa a imagem **por digest** (o que foi testado é exatamente o que sobe);
+3. roda o Job de migração e espera concluir. Se as migrações foram regeneradas para uma nova
+   versão da base contra o mesmo banco, o Flyway recusa e o deploy para antes de mexer nos
+   workers: crie o banco novo e atualize os dois secrets primeiro;
+4. aplica `k8s/` e espera o rollout do `rtc-worker`.
+
+### Configuração no GitHub
+
+1. **Environments** (Settings → Environments): `homologacao` e `producao`. Em `producao`,
+   configure *Required reviewers* e restrinja a *deployment branches and tags* a `v*`.
+2. **Runners self-hosted** (Settings → Actions → Runners), um na rede de cada cluster, com os
+   labels `k3s,homologacao` ou `k3s,producao`, e `kubectl` instalado.
+3. **kubeconfig do runner** com o token da ServiceAccount `rtc-deployer` (só o namespace `rtc`):
+
+   ```bash
+   TOKEN=$(kubectl -n rtc get secret rtc-deployer-token -o jsonpath='{.data.token}' | base64 -d)
+   kubectl config set-cluster k3s --server=https://<api-do-k3s>:6443 \
+     --certificate-authority=/var/lib/rancher/k3s/server/tls/server-ca.crt --embed-certs=true
+   kubectl config set-credentials rtc-deployer --token="$TOKEN"
+   kubectl config set-context rtc --cluster=k3s --user=rtc-deployer --namespace=rtc
+   kubectl config use-context rtc
+   ```
+
+4. **Pacote no GHCR**: criado na primeira publicação (`ghcr.io/<dono>/calculadora-rtc-worker`).
+   Se ficar privado, crie o secret `ghcr-pull` no cluster (acima).
+
+### Release em produção
+
+```bash
+# 1. ajuste <version> no pom.xml (ex.: 1.7.0), faça o merge na main e valide em homologação
+# 2. crie a tag da mesma versão
+git tag v1.7.0 && git push origin v1.7.0
+# 3. aprove o deploy no environment "producao" (Actions → Deploy)
+```
+
+Deploy manual de um commit: *Actions → Deploy → Run workflow*, escolhendo o ambiente.
 
 ## Cadastrar uma empresa
 

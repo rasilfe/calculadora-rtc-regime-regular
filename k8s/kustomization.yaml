@@ -1,17 +1,20 @@
-# kubectl apply -k k8s/
-# O Job de migração (k8s/migracao) e o exemplo de escalonamento do consumidor
-# (k8s/consumidor) ficam fora: são aplicados à parte.
+# kubectl apply -k k8s/   (o deploy pelo GitHub Actions faz isso; ver .github/workflows/deploy.yml)
+# Ficam fora e são aplicados à parte:
+#   00-namespace.yaml e deploy/rbac.yaml  - uma vez, pelo administrador do cluster
+#   migracao/job.yaml                     - a cada deploy, antes dos manifestos
+#   empresas/                             - no cadastro de cada empresa
+#   consumidor/                           - exemplo
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: rtc
 resources:
-  - 00-namespace.yaml
   - rabbitmq/cluster.yaml
   - rabbitmq/topologia.yaml
   - redis/redis.yaml
   - worker/deployment.yaml
   - worker/keda.yaml
 images:
+  # O deploy troca newTag pelo digest da imagem publicada.
   - name: calculadora-rtc-worker
-    newName: registry.local/calculadora-rtc-worker
+    newName: ghcr.io/rasilfe/calculadora-rtc-worker
     newTag: "1.6.1"

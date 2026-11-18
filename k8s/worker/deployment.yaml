@@ -44,6 +44,10 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
+      # Necessário se o pacote no GHCR for privado (ver k8s/README.md); sem o Secret, a
+      # imagem é baixada anonimamente.
+      imagePullSecrets:
+        - name: ghcr-pull
       containers:
         - name: worker
           image: calculadora-rtc-worker
