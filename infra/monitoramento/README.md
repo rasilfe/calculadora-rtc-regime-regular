@@ -53,13 +53,13 @@ curl -X POST http://localhost:9090/-/reload
 | Alerta | Quando |
 |---|---|
 | `RtcWorkerFora` | worker sem responder às coletas por 2 min |
-| `RtcFilaSemConsumidores` | fila de entrada sem consumidores por 2 min |
+| `RtcFilaSemConsumidores` | fila de entrada de notas ou de base de cálculo sem consumidores por 2 min |
 | `RtcMensagensNaDlq` | qualquer mensagem numa DLQ |
 | `RtcFilaEntradaAcumulando` | mais de 1.000 notas esperando por 10 min |
 | `RtcErroTecnicoNoCalculo` | nota devolvida à fila por erro técnico |
 | `RtcRedisIndisponivel` | idempotência funcionando sem Redis |
 | `RtcRabbitAlarmeMemoria` | RabbitMQ bloqueando publicadores por memória |
-| `RtcEmpresaNaoConsome` | mais de 5.000 resultados não lidos por 30 min numa fila de empresa |
+| `RtcEmpresaNaoConsome` | mais de 5.000 resultados não lidos por 30 min numa fila de empresa (notas ou base) |
 | `RtcNoK3sMemoria` | k3s-1 com menos de 10% de memória livre |
 
 Não há Alertmanager: os alertas aparecem no Grafana (*Alerting → Alert rules*, fonte

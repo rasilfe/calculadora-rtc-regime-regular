@@ -101,6 +101,27 @@ class ResultadoPublisherTest {
         org.mockito.Mockito.verifyNoInteractions(template);
     }
 
+    @Test
+    void baseDeCalculoVaiParaARoutingKeyDaBaseDaEmpresa() {
+        aoEnviar(cd -> cd.getFuture().complete(new CorrelationData.Confirm(true, null)));
+        final var base = new ResultadoBaseCalculo("1", UUID.randomUUID(), "12ABC34501DE35", "item-9", null,
+                ResultadoBaseCalculo.Status.ERRO, "1.6.1", null, 1, null, null);
+
+        assertThatCode(() -> publisher.publicarBaseConfirmado(base)).doesNotThrowAnyException();
+
+        final var captor = ArgumentCaptor.forClass(Message.class);
+        verify(template).send(eq("rtc.calculo.out"), eq("resultado-base.12ABC34501DE35"), captor.capture(),
+                any(CorrelationData.class));
+        final MessageProperties props = captor.getValue().getMessageProperties();
+        assertThat(props.getMessageId()).isEqualTo(base.correlationId().toString());
+        assertThat((String) props.getHeader("x-status")).isEqualTo("ERRO");
+        assertThat((String) props.getHeader("x-id-calculo")).isEqualTo("item-9");
+        assertThat((String) props.getHeader("x-cnpj")).isEqualTo("12ABC34501DE35");
+        assertThat(props.getHeaders()).doesNotContainKey("x-id-nota");
+        // campos nulos não vão para o JSON
+        assertThat(new String(captor.getValue().getBody())).doesNotContain("loteId", "resultado\"");
+    }
+
     private void aoEnviar(Consumer<CorrelationData> broker) {
         doAnswer(inv -> {
             broker.accept(inv.getArgument(3));

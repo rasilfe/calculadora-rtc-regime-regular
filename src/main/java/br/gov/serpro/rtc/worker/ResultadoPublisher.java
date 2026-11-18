@@ -1,6 +1,8 @@
 package br.gov.serpro.rtc.worker;
 
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -20,8 +22,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  * Publica o {@link ResultadoNota} na Fila de Saída e só retorna depois que o
  * broker confirma a publicação (publisher confirms).
  *
- * <p>A routing key é {@code resultado.<CNPJ>}: cada empresa só recebe os próprios
- * resultados. Se a empresa não tiver fila de saída, a mensagem volta
+ * <p>A routing key é {@code resultado.<CNPJ>} (notas) ou {@code resultado-base.<CNPJ>}
+ * (base de cálculo): cada empresa só recebe os próprios resultados. Se a empresa não tiver fila de saída, a mensagem volta
  * ({@code basic.return}) e a nota permanece na Fila de Entrada.
  *
  * <p>As confirmações são assíncronas no canal AMQP; quem espera é apenas a thread
@@ -44,9 +46,29 @@ public class ResultadoPublisher {
     }
 
     public void publicarConfirmado(ResultadoNota resultado) {
-        final Message mensagem = criarMensagem(resultado);
-        final var correlacao = new CorrelationData(resultado.correlationId().toString());
-        final String routingKey = routingKeyDaEmpresa(resultado.cnpj());
+        final Map<String, Object> headers = new LinkedHashMap<>();
+        headers.put("x-id-nota", resultado.idNota());
+        headers.put("x-status", resultado.status().name());
+        headers.put("x-versao-base", resultado.versaoBase());
+        publicar(resultado, resultado.correlationId().toString(), resultado.cnpj(),
+                routingKeyDaEmpresa(resultado.cnpj()), headers);
+    }
+
+    /** Resultado da base de cálculo: routing key {@code resultado-base.<CNPJ>}. */
+    public void publicarBaseConfirmado(ResultadoBaseCalculo resultado) {
+        final Map<String, Object> headers = new LinkedHashMap<>();
+        if (resultado.idCalculo() != null) {
+            headers.put("x-id-calculo", resultado.idCalculo());
+        }
+        headers.put("x-status", resultado.status().name());
+        publicar(resultado, resultado.correlationId().toString(), resultado.cnpj(),
+                routingKeyBaseDaEmpresa(resultado.cnpj()), headers);
+    }
+
+    private void publicar(Object resultado, String correlationId, String cnpj, String routingKey,
+            Map<String, Object> headers) {
+        final Message mensagem = criarMensagem(resultado, correlationId, cnpj, headers);
+        final var correlacao = new CorrelationData(correlationId);
         rabbitTemplate.send(properties.getExchangeSaida(), routingKey, mensagem, correlacao);
         final CorrelationData.Confirm confirmacao;
         try {
@@ -74,23 +96,29 @@ public class ResultadoPublisher {
         return properties.getMultiEmpresa().getPrefixoRoutingKeySaida() + cnpj;
     }
 
-    private Message criarMensagem(ResultadoNota resultado) {
+    /** {@code resultado-base.<CNPJ>}: só a fila de base de cálculo da empresa recebe o resultado. */
+    String routingKeyBaseDaEmpresa(String cnpj) {
+        if (cnpj == null || cnpj.isBlank()) {
+            throw new IllegalStateException("Resultado sem CNPJ: não há como rotear para a fila da empresa");
+        }
+        return properties.getBaseCalculo().getPrefixoRoutingKeySaida() + cnpj;
+    }
+
+    private Message criarMensagem(Object resultado, String correlationId, String cnpj, Map<String, Object> headers) {
         final byte[] corpo;
         try {
             corpo = objectMapper.writeValueAsBytes(resultado);
         } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Falha ao serializar o resultado da nota " + resultado.correlationId(), e);
+            throw new IllegalStateException("Falha ao serializar o resultado " + correlationId, e);
         }
         final var props = new MessageProperties();
         props.setContentType(MessageProperties.CONTENT_TYPE_JSON);
         props.setContentEncoding(StandardCharsets.UTF_8.name());
         props.setDeliveryMode(MessageDeliveryMode.PERSISTENT);
-        props.setMessageId(resultado.correlationId().toString());
-        props.setCorrelationId(resultado.correlationId().toString());
-        props.setHeader(properties.getMultiEmpresa().getHeaderCnpj(), resultado.cnpj());
-        props.setHeader("x-id-nota", resultado.idNota());
-        props.setHeader("x-status", resultado.status().name());
-        props.setHeader("x-versao-base", resultado.versaoBase());
+        props.setMessageId(correlationId);
+        props.setCorrelationId(correlationId);
+        props.setHeader(properties.getMultiEmpresa().getHeaderCnpj(), cnpj);
+        headers.forEach(props::setHeader);
         return new Message(corpo, props);
     }
 

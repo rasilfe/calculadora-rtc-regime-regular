@@ -3,12 +3,18 @@
 Pipeline orientado a eventos e **multiempresa**:
 
 ```
+notas:
 empresa --nota.<CNPJ>--> rtc.calculo.in --nota.*--> rtc.calculo.entrada --> worker
 worker --resultado.<CNPJ>--> rtc.calculo.out --> rtc.calculo.saida.<CNPJ> --> empresa
+
+base de cálculo unificada (um item por mensagem):
+empresa --base.<CNPJ>--> rtc.calculo.in --base.*--> rtc.basecalculo.entrada --> worker
+worker --resultado-base.<CNPJ>--> rtc.calculo.out --> rtc.basecalculo.saida.<CNPJ> --> empresa
 ```
 
-A fila de entrada é compartilhada (um único ponto de escalonamento para o KEDA); a de
-saída é uma por empresa. Mensagens ilegíveis ou que falham repetidamente vão para
+Cada fila de entrada é compartilhada entre as empresas (um ponto de escalonamento para o
+KEDA); as de saída são uma por empresa. A base de cálculo tem fila própria para não
+esperar atrás de uma rodada de notas. Mensagens ilegíveis ou que falham repetidamente vão para
 `rtc.dlx` → `*.dlq`.
 
 ## Ambientes
@@ -113,9 +119,14 @@ para a empresa:
 | Recurso | Efeito |
 |---|---|
 | `User` `emp-<cnpj>` | credencial própria da empresa |
-| `TopicPermission` em `rtc.calculo.in` | só publica com routing key `nota.<CNPJ>` |
-| `Permission` | escreve só em `rtc.calculo.in`; lê só `rtc.calculo.saida.<CNPJ>` |
-| `Queue` `rtc.calculo.saida.<CNPJ>` + `Binding` `resultado.<CNPJ>` | recebe só os próprios resultados |
+| `TopicPermission` em `rtc.calculo.in` | só publica com routing key `nota.<CNPJ>` ou `base.<CNPJ>` |
+| `Permission` | escreve só em `rtc.calculo.in`; lê só `rtc.calculo.saida.<CNPJ>` e `rtc.basecalculo.saida.<CNPJ>` |
+| `Queue` `rtc.calculo.saida.<CNPJ>` + `Binding` `resultado.<CNPJ>` | recebe só os próprios resultados de notas |
+| `Queue` `rtc.basecalculo.saida.<CNPJ>` + `Binding` `resultado-base.<CNPJ>` | recebe só os próprios resultados de base de cálculo |
+
+O script é idempotente: rodá-lo de novo para uma empresa já cadastrada acrescenta o que
+faltar (por exemplo, a fila de base de cálculo das empresas cadastradas antes dela) sem
+trocar a senha.
 
 Remover: `kubectl -n rtc delete user,permission,topicpermission,queue,binding -l rtc.serpro.gov.br/cnpj=<cnpj-minúsculo>`.
 
@@ -163,6 +174,40 @@ nota fica na fila de entrada até o limite de entregas.
 
 A entrega é **pelo menos uma vez**: o consumidor deve gravar com chave única
 (`idNota`, `correlationId`).
+
+### Base de cálculo unificada
+
+Calcula as três bases de um item (regime geral IBS/CBS, Imposto Seletivo e Simples
+Nacional), como o antigo `POST /calculadora/base-calculo/base-calculo-unificada`.
+
+**Entrada** (exchange `rtc.calculo.in`, routing key `base.<CNPJ>`, header `x-cnpj`, mesmas
+propriedades da nota). O `payload` é o JSON do antigo endpoint, com os componentes na raiz:
+
+```json
+{
+  "schemaVersion": "1",
+  "correlationId": "0b6f1c2e-5d4a-4e3b-9c8d-7a6b5c4d3e2f",
+  "idCalculo": "pedido-123-item-1",
+  "loteId": "opcional",
+  "produzidoEm": "2026-11-18T10:00:00-03:00",
+  "payload": {
+    "anoFatoGerador": 2026, "tipoDocumento": 55, "natureza": "bem",
+    "vProd": 1000.00, "vFrete": 50.00, "vDesc": 50.00, "vICMS": 180.00
+  }
+}
+```
+
+**Saída** (fila `rtc.basecalculo.saida.<CNPJ>`, routing key `resultado-base.<CNPJ>`):
+`ResultadoBaseCalculo`, com `status` `SUCESSO` (e `resultado` com `baseRG`, `baseIS`,
+`baseSN` e `avisos` sobre campos ignorados) ou `ERRO` (e `erros` no mesmo formato dos erros
+de nota: campo obrigatório ausente, valor negativo, ou `REG-024` para `tipoDocumento`
+diferente de 55 e 65). Cabeçalhos: `message_id` e `correlation_id` = correlationId,
+`x-cnpj`, `x-status` e `x-id-calculo` (se informado).
+
+Diferenças em relação à nota: não há idempotência no Redis (o cálculo é puro e leva
+milissegundos; uma reentrega recalcula e publica de novo) e não há rejeição por
+`correlationId` repetido. Deduplique pelo `correlationId`. Mensagens ilegíveis ou com
+empresa inválida vão para `rtc.basecalculo.entrada.dlq`.
 
 ## Garantias do worker
 

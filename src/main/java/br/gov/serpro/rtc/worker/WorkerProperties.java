@@ -47,6 +47,25 @@ public class WorkerProperties {
 
     private final MultiEmpresa multiEmpresa = new MultiEmpresa();
 
+    private final BaseCalculo baseCalculo = new BaseCalculo();
+
+    /**
+     * Fila de cálculo da base unificada (RG/IBS-CBS, IS e Simples Nacional de um item),
+     * separada da fila de notas para não esperar atrás de uma rodada.
+     */
+    @Getter
+    @Setter
+    public static class BaseCalculo {
+        /** Liga o consumo da fila de base de cálculo. */
+        private boolean habilitado = true;
+        /** Fila de onde os pedidos de base de cálculo são consumidos. */
+        private String filaEntrada = "rtc.basecalculo.entrada";
+        /** Routing key de entrada: {@code base.<CNPJ>}. */
+        private String prefixoRoutingKeyEntrada = "base.";
+        /** Routing key de saída: {@code resultado-base.<CNPJ>} (fila {@code rtc.basecalculo.saida.<CNPJ>}). */
+        private String prefixoRoutingKeySaida = "resultado-base.";
+    }
+
     @Getter
     @Setter
     public static class MultiEmpresa {

@@ -56,3 +56,15 @@ spec:
         queueName: rtc.calculo.entrada
         mode: QueueLength
         value: "500"
+    # base de cálculo: pedidos de milissegundos; só escala com muita fila acumulada.
+    # O KEDA usa o maior número de réplicas pedido entre os gatilhos.
+    - type: rabbitmq
+      authenticationRef:
+        name: rtc-rabbitmq-keda
+      metadata:
+        protocol: http
+        host: http://rtc-rabbit.rtc.svc:15672
+        vhostName: rtc
+        queueName: rtc.basecalculo.entrada
+        mode: QueueLength
+        value: "5000"

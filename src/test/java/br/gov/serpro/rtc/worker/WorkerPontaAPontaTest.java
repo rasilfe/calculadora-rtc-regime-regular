@@ -89,10 +89,16 @@ class WorkerPontaAPontaTest {
             final var filaEntrada = new Queue("rtc.calculo.entrada", true);
             final var saidaA = new Queue(WorkerConfig.filaSaidaDaEmpresa(EMPRESA_A), true);
             final var saidaB = new Queue(WorkerConfig.filaSaidaDaEmpresa(EMPRESA_B), true);
-            return new Declarables(entrada, saida, filaEntrada, saidaA, saidaB,
+            final var filaBase = new Queue("rtc.basecalculo.entrada", true);
+            final var baseA = new Queue(WorkerConfig.filaBaseSaidaDaEmpresa(EMPRESA_A), true);
+            final var baseB = new Queue(WorkerConfig.filaBaseSaidaDaEmpresa(EMPRESA_B), true);
+            return new Declarables(entrada, saida, filaEntrada, saidaA, saidaB, filaBase, baseA, baseB,
                     BindingBuilder.bind(filaEntrada).to(entrada).with(WorkerConfig.BINDING_ENTRADA),
                     BindingBuilder.bind(saidaA).to(saida).with("resultado." + EMPRESA_A),
-                    BindingBuilder.bind(saidaB).to(saida).with("resultado." + EMPRESA_B));
+                    BindingBuilder.bind(saidaB).to(saida).with("resultado." + EMPRESA_B),
+                    BindingBuilder.bind(filaBase).to(entrada).with(WorkerConfig.BINDING_BASE_ENTRADA),
+                    BindingBuilder.bind(baseA).to(saida).with("resultado-base." + EMPRESA_A),
+                    BindingBuilder.bind(baseB).to(saida).with("resultado-base." + EMPRESA_B));
         }
     }
 
@@ -112,6 +118,50 @@ class WorkerPontaAPontaTest {
     void esvaziarFilas() {
         admin.purgeQueue(WorkerConfig.filaSaidaDaEmpresa(EMPRESA_A), false);
         admin.purgeQueue(WorkerConfig.filaSaidaDaEmpresa(EMPRESA_B), false);
+        admin.purgeQueue(WorkerConfig.filaBaseSaidaDaEmpresa(EMPRESA_A), false);
+        admin.purgeQueue(WorkerConfig.filaBaseSaidaDaEmpresa(EMPRESA_B), false);
+    }
+
+    @Test
+    void baseDeCalculoChegaNaFilaDeBaseDaEmpresaENaoNaDeNotas() throws Exception {
+        final UUID id = UUID.randomUUID();
+
+        publicarBase(id, EMPRESA_A, "base." + EMPRESA_A, 55);
+
+        final Message resposta = receber(WorkerConfig.filaBaseSaidaDaEmpresa(EMPRESA_A), ESPERA.toMillis());
+        assertThat(resposta).as("resultado na fila de base da empresa A").isNotNull();
+        final ResultadoBaseCalculo resultado = objectMapper.readValue(resposta.getBody(), ResultadoBaseCalculo.class);
+        assertThat(resultado.correlationId()).isEqualTo(id);
+        assertThat(resultado.cnpj()).isEqualTo(EMPRESA_A);
+        assertThat(resultado.status()).isEqualTo(ResultadoBaseCalculo.Status.SUCESSO);
+        assertThat(resultado.resultado().getBaseRG()).isEqualByComparingTo("1000.00");
+        assertThat((String) resposta.getMessageProperties().getHeader("x-status")).isEqualTo("SUCESSO");
+
+        assertThat(receber(WorkerConfig.filaSaidaDaEmpresa(EMPRESA_A), 500)).as("fila de notas").isNull();
+        assertThat(receber(WorkerConfig.filaBaseSaidaDaEmpresa(EMPRESA_B), 500)).as("outra empresa").isNull();
+        aguardarFilaVazia("rtc.basecalculo.entrada");
+    }
+
+    @Test
+    void baseComDadosInvalidosVoltaComoErroParaAEmpresa() throws Exception {
+        final UUID id = UUID.randomUUID();
+
+        publicarBase(id, EMPRESA_B, "base." + EMPRESA_B, 57);
+
+        final Message resposta = receber(WorkerConfig.filaBaseSaidaDaEmpresa(EMPRESA_B), ESPERA.toMillis());
+        final ResultadoBaseCalculo resultado = objectMapper.readValue(resposta.getBody(), ResultadoBaseCalculo.class);
+        assertThat(resultado.status()).isEqualTo(ResultadoBaseCalculo.Status.ERRO);
+        assertThat(resultado.erros()).extracting(e -> e.code()).containsExactly("REG-024");
+        aguardarFilaVazia("rtc.basecalculo.entrada");
+    }
+
+    @Test
+    void baseComRoutingKeyDeOutraEmpresaNaoGeraResultado() throws Exception {
+        publicarBase(UUID.randomUUID(), EMPRESA_B, "base." + EMPRESA_A, 55);
+
+        aguardarFilaVazia("rtc.basecalculo.entrada");
+        assertThat(receber(WorkerConfig.filaBaseSaidaDaEmpresa(EMPRESA_A), 1_000)).isNull();
+        assertThat(receber(WorkerConfig.filaBaseSaidaDaEmpresa(EMPRESA_B), 500)).isNull();
     }
 
     @Test
@@ -221,9 +271,32 @@ class WorkerPontaAPontaTest {
         rabbit.send(WorkerConfig.EXCHANGE_ENTRADA, routingKey, new Message(objectMapper.writeValueAsBytes(envelope), props));
     }
 
+    private void publicarBase(UUID id, String headerCnpj, String routingKey, int tipoDocumento) throws Exception {
+        final ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("anoFatoGerador", 2026);
+        payload.put("tipoDocumento", tipoDocumento);
+        payload.put("natureza", "bem");
+        payload.put("vProd", 1000.00);
+        final ObjectNode envelope = objectMapper.createObjectNode();
+        envelope.put("schemaVersion", "1");
+        envelope.put("correlationId", id.toString());
+        envelope.put("idCalculo", "item-" + id);
+        envelope.put("produzidoEm", OffsetDateTime.now().toString());
+        envelope.set("payload", payload);
+
+        final var props = new MessageProperties();
+        props.setContentType(MessageProperties.CONTENT_TYPE_JSON);
+        props.setHeader("x-cnpj", headerCnpj);
+        rabbit.send(WorkerConfig.EXCHANGE_ENTRADA, routingKey, new Message(objectMapper.writeValueAsBytes(envelope), props));
+    }
+
     private void aguardarFilaDeEntradaVazia() {
+        aguardarFilaVazia("rtc.calculo.entrada");
+    }
+
+    private void aguardarFilaVazia(String fila) {
         Awaitility.await().atMost(ESPERA).pollInterval(Duration.ofMillis(200)).untilAsserted(() -> {
-            final var info = admin.getQueueInfo("rtc.calculo.entrada");
+            final var info = admin.getQueueInfo(fila);
             assertThat(info).isNotNull();
             assertThat(info.getMessageCount()).isZero();
             assertThat(info.getConsumerCount()).isPositive();

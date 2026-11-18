@@ -315,6 +315,12 @@ worker:
     prefixo-routing-key-entrada: "nota."
     prefixo-routing-key-saida: "resultado."
     exigir-routing-key-da-empresa: ${WORKER_EXIGIR_ROUTING_KEY_DA_EMPRESA:true}
+  # Fila de base de cálculo unificada (um item por mensagem): base.<CNPJ> -> resultado-base.<CNPJ>.
+  base-calculo:
+    habilitado: ${WORKER_BASE_CALCULO_HABILITADO:true}
+    fila-entrada: ${WORKER_BASE_CALCULO_FILA_ENTRADA:rtc.basecalculo.entrada}
+    prefixo-routing-key-entrada: "base."
+    prefixo-routing-key-saida: "resultado-base."
   idempotencia:
     tipo: ${WORKER_IDEMPOTENCIA:redis}
     lease: 5m

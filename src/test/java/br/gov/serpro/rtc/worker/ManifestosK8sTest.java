@@ -80,8 +80,21 @@ class ManifestosK8sTest {
     @Test
     void filaDeEntradaCompartilhadaEDlqs() {
         final List<String> filas = nomes(doTipo(DOCUMENTOS, "Queue"));
+        final String filaBase = PADRAO.getBaseCalculo().getFilaEntrada();
         assertThat(filas).containsExactlyInAnyOrder(PADRAO.getFilaEntrada(), PADRAO.getFilaEntrada() + ".dlq",
-                WorkerConfig.DLQ_SAIDA);
+                WorkerConfig.DLQ_SAIDA, filaBase, filaBase + ".dlq");
+        assertThat(doTipo(DOCUMENTOS, "Binding")).anySatisfy(b -> assertThat(mapa(b, "spec"))
+                .containsEntry("source", WorkerConfig.EXCHANGE_ENTRADA)
+                .containsEntry("destination", filaBase)
+                .containsEntry("routingKey", WorkerConfig.BINDING_BASE_ENTRADA));
+        assertThat(doTipo(DOCUMENTOS, "Binding")).anySatisfy(b -> assertThat(mapa(b, "spec"))
+                .containsEntry("source", WorkerConfig.EXCHANGE_DLX)
+                .containsEntry("destination", WorkerConfig.DLQ_SAIDA)
+                .containsEntry("routingKey", PADRAO.getBaseCalculo().getPrefixoRoutingKeySaida() + "#"));
+        assertThat(doTipo(DOCUMENTOS, "Binding")).anySatisfy(b -> assertThat(mapa(b, "spec"))
+                .containsEntry("source", WorkerConfig.EXCHANGE_DLX)
+                .containsEntry("destination", filaBase + ".dlq")
+                .containsEntry("routingKey", filaBase + ".dlq"));
         doTipo(DOCUMENTOS, "Queue").forEach(q -> assertThat(mapa(q, "spec")).containsEntry("type", "quorum"));
 
         assertThat(doTipo(DOCUMENTOS, "Binding")).anySatisfy(b -> assertThat(mapa(b, "spec"))
@@ -107,12 +120,19 @@ class ManifestosK8sTest {
                 .containsEntry("overflow", "reject-publish")
                 .containsKeys("max-length", "delivery-limit");
 
+        final String filaBase = PADRAO.getBaseCalculo().getFilaEntrada();
+        assertThat(policyQueAplicaA(filaBase)).containsEntry("dead-letter-exchange", WorkerConfig.EXCHANGE_DLX)
+                .containsEntry("dead-letter-routing-key", filaBase + ".dlq")
+                .containsEntry("overflow", "reject-publish")
+                .containsKeys("max-length", "delivery-limit");
+
         for (String cnpj : List.of("11222333000181", "12ABC34501DE35")) {
-            final var saida = policyQueAplicaA(WorkerConfig.filaSaidaDaEmpresa(cnpj));
-            assertThat(saida).containsEntry("dead-letter-exchange", WorkerConfig.EXCHANGE_DLX)
-                    .doesNotContainKey("dead-letter-routing-key")
-                    .containsEntry("overflow", "reject-publish")
-                    .containsKeys("max-length", "delivery-limit");
+            for (String fila : List.of(WorkerConfig.filaSaidaDaEmpresa(cnpj), WorkerConfig.filaBaseSaidaDaEmpresa(cnpj))) {
+                assertThat(policyQueAplicaA(fila)).as(fila).containsEntry("dead-letter-exchange", WorkerConfig.EXCHANGE_DLX)
+                        .doesNotContainKey("dead-letter-routing-key")
+                        .containsEntry("overflow", "reject-publish")
+                        .containsKeys("max-length", "delivery-limit");
+            }
         }
         // a DLQ de saída não é capturada pela policy das filas por empresa
         assertThat(doTipo(DOCUMENTOS, "Policy").stream()
@@ -132,6 +152,10 @@ class ManifestosK8sTest {
         assertThat(prefixoEntrada + cnpj).matches((String) topic.get("write"));
         assertThat(prefixoEntrada + outro).doesNotMatch((String) topic.get("write"));
         assertThat(prefixoEntrada + cnpj + ".x").doesNotMatch((String) topic.get("write"));
+        final var prefixoBase = PADRAO.getBaseCalculo().getPrefixoRoutingKeyEntrada();
+        assertThat(prefixoBase + cnpj).matches((String) topic.get("write"));
+        assertThat(prefixoBase + outro).doesNotMatch((String) topic.get("write"));
+        assertThat("outro." + cnpj).doesNotMatch((String) topic.get("write"));
 
         final var permissoes = mapa(mapa(unico(docs, "Permission", null), "spec"), "permissions");
         assertThat(WorkerConfig.EXCHANGE_ENTRADA).matches((String) permissoes.get("write"));
@@ -139,15 +163,25 @@ class ManifestosK8sTest {
         assertThat(WorkerConfig.filaSaidaDaEmpresa(cnpj)).matches((String) permissoes.get("read"));
         assertThat(WorkerConfig.filaSaidaDaEmpresa(outro)).doesNotMatch((String) permissoes.get("read"));
         assertThat(PADRAO.getFilaEntrada()).doesNotMatch((String) permissoes.get("read"));
+        assertThat(WorkerConfig.filaBaseSaidaDaEmpresa(cnpj)).matches((String) permissoes.get("read"));
+        assertThat(WorkerConfig.filaBaseSaidaDaEmpresa(outro)).doesNotMatch((String) permissoes.get("read"));
+        assertThat(PADRAO.getBaseCalculo().getFilaEntrada()).doesNotMatch((String) permissoes.get("read"));
 
-        final var fila = mapa(unico(docs, "Queue", null), "spec");
-        assertThat(fila).containsEntry("name", WorkerConfig.filaSaidaDaEmpresa(cnpj)).containsEntry("type", "quorum");
-        assertThat(policyQueAplicaA((String) fila.get("name"))).isNotNull();
-
-        final var binding = mapa(unico(docs, "Binding", null), "spec");
-        assertThat(binding).containsEntry("source", PADRAO.getExchangeSaida())
-                .containsEntry("destination", WorkerConfig.filaSaidaDaEmpresa(cnpj))
-                .containsEntry("routingKey", prefixoSaida + cnpj);
+        // uma fila de saída para notas e outra para base de cálculo
+        final var prefixoBaseSaida = PADRAO.getBaseCalculo().getPrefixoRoutingKeySaida();
+        assertThat(doTipo(docs, "Queue")).hasSize(2);
+        assertThat(doTipo(docs, "Binding")).hasSize(2);
+        for (var esperado : List.of(List.of(WorkerConfig.filaSaidaDaEmpresa(cnpj), prefixoSaida + cnpj),
+                List.of(WorkerConfig.filaBaseSaidaDaEmpresa(cnpj), prefixoBaseSaida + cnpj))) {
+            final String nomeFila = esperado.get(0);
+            assertThat(doTipo(docs, "Queue")).anySatisfy(q -> assertThat(mapa(q, "spec"))
+                    .containsEntry("name", nomeFila).containsEntry("type", "quorum"));
+            assertThat(policyQueAplicaA(nomeFila)).isNotNull();
+            assertThat(doTipo(docs, "Binding")).anySatisfy(b -> assertThat(mapa(b, "spec"))
+                    .containsEntry("source", PADRAO.getExchangeSaida())
+                    .containsEntry("destination", nomeFila)
+                    .containsEntry("routingKey", esperado.get(1)));
+        }
 
         // nomes de objetos do Kubernetes em minúsculas (CNPJ alfanumérico tem letras)
         docs.forEach(d -> assertThat((String) mapa(d, "metadata").get("name")).isEqualTo(
@@ -174,6 +208,9 @@ class ManifestosK8sTest {
         final var trigger = mapa(lista(mapa(scaled, "spec"), "triggers"), 0);
         assertThat(mapa(trigger, "metadata")).containsEntry("queueName", PADRAO.getFilaEntrada())
                 .containsEntry("vhostName", "rtc");
+        final var triggerBase = mapa(lista(mapa(scaled, "spec"), "triggers"), 1);
+        assertThat(mapa(triggerBase, "metadata")).containsEntry("queueName", PADRAO.getBaseCalculo().getFilaEntrada())
+                .containsEntry("vhostName", "rtc");
         assertThat((int) mapa(scaled, "spec").get("minReplicaCount")).isGreaterThanOrEqualTo(1);
     }
 
@@ -183,6 +220,18 @@ class ManifestosK8sTest {
                 .map(u -> (String) mapa(u, "metadata").get("name")).toList();
         assertThat(users).containsExactlyInAnyOrder("rtc-worker", "rtc-keda");
         assertThat(DOCUMENTOS.toString()).contains("rtc-worker-user-credentials", "rtc-keda-user-credentials");
+    }
+
+    @Test
+    void workerLeAsDuasFilasDeEntradaEPublicaSoNaSaida() {
+        final var permissoes = mapa(mapa(unico(doTipo(DOCUMENTOS, "Permission"), "Permission", "rtc-worker"), "spec"),
+                "permissions");
+        final String leitura = (String) permissoes.get("read");
+        assertThat(PADRAO.getFilaEntrada()).matches(leitura);
+        assertThat(PADRAO.getBaseCalculo().getFilaEntrada()).matches(leitura);
+        assertThat(WorkerConfig.filaSaidaDaEmpresa("11222333000181")).doesNotMatch(leitura);
+        assertThat(PADRAO.getExchangeSaida()).matches((String) permissoes.get("write"));
+        assertThat(WorkerConfig.EXCHANGE_ENTRADA).doesNotMatch((String) permissoes.get("write"));
     }
 
     // ------------------------------------------------------------------ apoio
