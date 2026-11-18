@@ -291,10 +291,9 @@ kubectl apply -k k8s/ambientes/vps
 
 - **Sem redundância:** se a VPS cair, tudo para. As mensagens persistidas no RabbitMQ e os
   dados do PostgreSQL voltam com ela; faça backup do PostgreSQL e dos snapshots do k3s fora da VPS.
-- **Acesso das empresas:** o RabbitMQ não é exposto para fora do cluster. Para empresas
-  publicarem pela internet, é preciso expor o AMQP com **TLS** (porta 5671), por exemplo com
-  `spec.service.type: LoadBalancer` e `spec.tls` no `RabbitmqCluster` e um certificado do
-  cert-manager. Ainda não está nos manifestos.
+- **Acesso das empresas:** neste overlay o RabbitMQ não é exposto para fora do cluster. No
+  overlay enxuto, as empresas chegam por um Traefik externo que termina o TLS (ver
+  [Acesso das empresas pelo Traefik](#acesso-das-empresas-pelo-traefik)).
 
 ## Nó enxuto (6 GB)
 
@@ -327,3 +326,35 @@ kubelet-arg:
   - "kube-reserved=cpu=250m,memory=512Mi"
   - "eviction-hard=memory.available<200Mi"
 ```
+
+### Acesso das empresas pelo Traefik
+
+As empresas conectam com AMQP sobre TLS (`amqps://rtc-homogacao.casa.lan:5671`, vhost
+`rtc`). O Traefik da vm-infra termina o TLS e repassa AMQP puro para o k3s:
+
+```
+empresa --TLS :5671--> Traefik (vm-infra, 192.168.5.112) --AMQP :5672--> k3s-1 (192.168.5.120)
+```
+
+- **k3s:** o Service `rtc-rabbit-lan` (`k8s/ambientes/enxuto/rabbitmq-lan.yaml`) abre a 5672
+  no IP do nó pelo ServiceLB e aceita só a origem 192.168.5.112. Ele não tem NodePort
+  (`allocateLoadBalancerNodePorts: false`), que ficaria aberta para qualquer origem.
+  Se a vm-infra mudar de IP, ajuste `loadBalancerSourceRanges`.
+- **Traefik:** acrescente o entrypoint `amqps` de `docs/traefik/traefik-estatico.yml` à
+  configuração estática (com `readTimeout: 0s`, senão o Traefik v3 derruba conexões AMQP
+  ociosas após 60 s), publique a porta 5671 e coloque `docs/traefik/rtc-amqps.yml` no
+  diretório do provider file.
+- **Certificado:** `.lan` não tem Let's Encrypt. Use a CA interna (ou mkcert) e entregue o
+  `ca.crt` às empresas; com um wildcard `*.casa.lan` já configurado no Traefik, remova o
+  bloco `certificates` do arquivo.
+- **DNS:** `rtc-homogacao.casa.lan` deve resolver para 192.168.5.112.
+
+Teste a partir de uma máquina da rede (com o `ca.crt`):
+
+```bash
+openssl s_client -connect rtc-homogacao.casa.lan:5671 -servername rtc-homogacao.casa.lan -CAfile ca.crt </dev/null | grep -E "Verify return|subject="
+```
+
+A rede entre o Traefik e o k3s leva AMQP sem criptografia, inclusive as senhas das empresas.
+Isso é aceitável numa rede local de homologação. Para produção, use TLS também nesse trecho
+(`spec.tls` no `RabbitmqCluster` e `serversTransport` no Traefik) ou TLS passthrough.

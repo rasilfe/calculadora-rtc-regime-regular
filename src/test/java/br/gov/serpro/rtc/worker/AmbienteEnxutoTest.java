@@ -60,7 +60,7 @@ class AmbienteEnxutoTest {
     @Test
     void parteDaBaseETodoPatchTemAlvo() {
         assertThat(((List<?>) kustomization.get("resources")).stream().map(String::valueOf).toList())
-                .containsExactly("../../base");
+                .containsExactly("../../base", "rabbitmq-lan.yaml");
         for (var patch : PATCHES) {
             final String kind = (String) patch.get("kind");
             final String nome = (String) mapa(patch, "metadata").get("name");
@@ -87,6 +87,30 @@ class AmbienteEnxutoTest {
         assertThat(podSpec.get("topologySpreadConstraints")).isNull();
         assertThat(nomesEnv(doc(PATCHES, "Deployment", "rtc-worker")))
                 .containsAll(nomesEnv(doc(PATCHES_VPS, "Deployment", "rtc-worker")));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void amqpNaRedeLocalSoParaOTraefikESemNodePort() throws IOException {
+        final var svc = carregar(ENXUTO.resolve("rabbitmq-lan.yaml")).get(0);
+        final var spec = mapa(svc, "spec");
+        assertThat(spec).containsEntry("type", "LoadBalancer")
+                // NodePort ficaria aberta para qualquer origem, fora de loadBalancerSourceRanges
+                .containsEntry("allocateLoadBalancerNodePorts", false)
+                .containsEntry("externalTrafficPolicy", "Local");
+        assertThat((List<String>) spec.get("loadBalancerSourceRanges")).isNotEmpty()
+                .allSatisfy(r -> assertThat(r).endsWith("/32"));
+        assertThat(mapa(spec, "selector")).containsEntry("app.kubernetes.io/name", "rtc-rabbit");
+        assertThat((List<Map<String, Object>>) spec.get("ports")).singleElement()
+                .satisfies(p -> assertThat(p).containsEntry("port", 5672));
+
+        // o Traefik repassa para o mesmo IP que o filtro libera do outro lado
+        final String traefik = Files.readString(Path.of("docs/traefik/rtc-amqps.yml"), StandardCharsets.UTF_8);
+        assertThat(traefik).contains("entryPoints:", "- amqps", "HostSNI(", ":5672\"", "minVersion: VersionTLS12");
+        final var dinamico = carregar(Path.of("docs/traefik/rtc-amqps.yml")).get(0);
+        assertThat(mapa(mapa(dinamico, "tcp"), "routers")).containsKey("rtc-amqps");
+        final var estatico = carregar(Path.of("docs/traefik/traefik-estatico.yml")).get(0);
+        assertThat(mapa(mapa(estatico, "entryPoints"), "amqps")).containsEntry("address", ":5671");
     }
 
     @Test

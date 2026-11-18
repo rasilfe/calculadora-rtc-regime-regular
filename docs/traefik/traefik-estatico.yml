@@ -1,0 +1,26 @@
+# Configuração ESTÁTICA do Traefik na vm-infra: o entrypoint "amqps".
+#
+# Entrypoints só valem na configuração estática. Um bloco entryPoints no arquivo do
+# provider file (rtc-amqps.yml) é ignorado, e o log mostra
+# "EntryPoint doesn't exist entryPointName=amqps". Mudanças aqui exigem recriar o
+# container (docker compose up -d traefik); o provider file recarrega sozinho.
+#
+# Com traefik.yml, acrescente ao bloco entryPoints existente:
+entryPoints:
+  amqps:
+    address: ":5671"
+    transport:
+      respondingTimeouts:
+        # Conexões AMQP ficam abertas por horas. No Traefik v3 o readTimeout padrão é 60 s
+        # e derrubaria consumidores ociosos; o heartbeat do AMQP já detecta conexão morta.
+        readTimeout: 0s
+#
+# Com a configuração em flags do docker-compose (command:), o equivalente é:
+#   command:
+#     - "--entrypoints.amqps.address=:5671"
+#     - "--entrypoints.amqps.transport.respondingTimeouts.readTimeout=0s"
+#   ports:
+#     - "5671:5671"
+#
+# Porta publicada pelo Docker não passa pelo ufw: a 5671 fica aberta para qualquer origem
+# que alcance a vm-infra, independentemente das regras do ufw.
