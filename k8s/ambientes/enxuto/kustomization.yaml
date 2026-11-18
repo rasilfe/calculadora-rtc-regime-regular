@@ -11,13 +11,15 @@
 #   - rollout sem pod extra (maxSurge 0): durante o deploy as notas esperam na fila;
 #   - RabbitMQ com limite de 1 GiB e disco de 5 GiB.
 # O PostgreSQL enxuto fica em banco/. As empresas chegam pelo Traefik da vm-infra, que
-# termina o TLS e repassa para o Service rtc-rabbit-lan (rabbitmq-lan.yaml).
+# termina o TLS e repassa para o Service rtc-rabbit-lan (rabbitmq-lan.yaml). O Prometheus da
+# vm-apps coleta as métricas pelos Services de metricas-lan.yaml.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: rtc
 resources:
   - ../../base
   - rabbitmq-lan.yaml
+  - metricas-lan.yaml
 patches:
   - path: rabbitmq.yaml
   - path: worker.yaml

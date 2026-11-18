@@ -1,0 +1,40 @@
+# Coleta da homologação (k3s-1, 192.168.5.120). Os Services do k3s só aceitam a origem
+# 192.168.5.50 (vm-apps): rodar este Prometheus em outra máquina exige ajustar
+# loadBalancerSourceRanges em k8s/ambientes/enxuto/metricas-lan.yaml.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    ambiente: homologacao
+
+rule_files:
+  - regras.yml
+
+scrape_configs:
+  - job_name: rtc-worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["192.168.5.120:9101"]
+
+  # métricas agregadas do broker (memória, conexões, alarmes)
+  - job_name: rabbitmq
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["192.168.5.120:15692"]
+
+  # métricas por fila do vhost rtc (mensagens prontas, sem ack, consumidores)
+  - job_name: rabbitmq-filas
+    metrics_path: /metrics/detailed
+    params:
+      vhost: [rtc]
+      family: [queue_coarse_metrics, queue_consumer_count]
+    static_configs:
+      - targets: ["192.168.5.120:15692"]
+
+  - job_name: k3s-node
+    static_configs:
+      - targets: ["192.168.5.120:9100"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

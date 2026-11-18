@@ -1,0 +1,16 @@
+# Configuração DINÂMICA do Traefik (provider file) na vm-infra: Grafana da homologação.
+# O stack fica na vm-apps (infra/monitoramento/); o AdGuard já resolve *.casa.lan para o
+# Traefik (192.168.5.112).
+http:
+  routers:
+    rtc-grafana:
+      rule: "Host(`grafana.casa.lan`)"
+      entryPoints:
+        - web
+      service: rtc-grafana
+
+  services:
+    rtc-grafana:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.5.50:3000"
