@@ -1,0 +1,24 @@
+# AMQP do RabbitMQ na rede local, só para o Traefik da vm-infra.
+# O Traefik termina o TLS das empresas (porta 5671, ver docs/traefik/rtc-amqps.yml) e
+# repassa AMQP puro para cá. O ServiceLB do k3s abre a porta 5672 no IP do nó e aceita
+# apenas as origens de loadBalancerSourceRanges.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rtc-rabbit-lan
+  namespace: rtc
+spec:
+  type: LoadBalancer
+  # sem NodePort: ela ficaria aberta para qualquer origem, fora do filtro abaixo
+  allocateLoadBalancerNodePorts: false
+  # mantém o IP de origem real, para o filtro valer contra o IP da vm-infra
+  externalTrafficPolicy: Local
+  loadBalancerSourceRanges:
+    - 192.168.5.112/32   # vm-infra (Traefik)
+  selector:
+    app.kubernetes.io/name: rtc-rabbit
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: 5672
+      protocol: TCP

@@ -1,0 +1,34 @@
+# Configuração DINÂMICA do Traefik (provider file) na vm-infra: AMQP com TLS para as empresas.
+#
+#   empresa --TLS :5671--> Traefik (vm-infra) --AMQP :5672--> k3s-1 (Service rtc-rabbit-lan)
+#
+# O Traefik termina o TLS; o k3s só aceita a porta 5672 vinda do IP da vm-infra
+# (k8s/ambientes/enxuto/rabbitmq-lan.yaml). Precisa também do entrypoint "amqps" na
+# configuração ESTÁTICA (ver traefik-estatico.yml) e da porta 5671 publicada no container.
+tcp:
+  routers:
+    rtc-amqps:
+      entryPoints:
+        - amqps
+      # O cliente AMQP envia o SNI quando conecta pelo nome (pika, Java, .NET, Go fazem isso).
+      rule: "HostSNI(`rtc-homogacao.casa.lan`)"
+      service: rtc-rabbitmq
+      tls:
+        options: rtc-amqps
+
+  services:
+    rtc-rabbitmq:
+      loadBalancer:
+        servers:
+          - address: "192.168.5.120:5672"
+
+tls:
+  options:
+    rtc-amqps:
+      minVersion: VersionTLS12
+  # Sem certificado próprio: o Traefik apresenta o certificado autoassinado padrão
+  # ("TRAEFIK DEFAULT CERT"). A conexão é cifrada, mas o cliente precisa desligar a
+  # verificação do servidor. Só para homologação: para produção, acrescente
+  #   certificates:
+  #     - certFile: /certs/rtc-homogacao.casa.lan.crt
+  #       keyFile: /certs/rtc-homogacao.casa.lan.key
