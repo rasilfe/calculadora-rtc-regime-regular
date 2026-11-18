@@ -1,0 +1,41 @@
+# Métricas na rede local, só para o Prometheus da vm-apps (infra/monitoramento/).
+# Mesmo padrão do rabbitmq-lan.yaml: ServiceLB do k3s, origem filtrada, sem NodePort.
+# Com um pod do worker (este overlay), o Service sempre cai no mesmo pod; com vários,
+# cada coleta pegaria um pod diferente e os contadores pareceriam reiniciar.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rtc-worker-metricas-lan
+  namespace: rtc
+spec:
+  type: LoadBalancer
+  allocateLoadBalancerNodePorts: false
+  externalTrafficPolicy: Local
+  loadBalancerSourceRanges:
+    - 192.168.5.50/32   # vm-apps (Prometheus)
+  selector:
+    app.kubernetes.io/name: rtc-worker
+  ports:
+    - name: metricas
+      port: 9101
+      targetPort: 9101
+      protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rtc-rabbit-metricas-lan
+  namespace: rtc
+spec:
+  type: LoadBalancer
+  allocateLoadBalancerNodePorts: false
+  externalTrafficPolicy: Local
+  loadBalancerSourceRanges:
+    - 192.168.5.50/32   # vm-apps (Prometheus)
+  selector:
+    app.kubernetes.io/name: rtc-rabbit
+  ports:
+    - name: prometheus
+      port: 15692
+      targetPort: 15692
+      protocol: TCP

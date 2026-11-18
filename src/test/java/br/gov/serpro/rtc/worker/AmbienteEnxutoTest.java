@@ -60,7 +60,7 @@ class AmbienteEnxutoTest {
     @Test
     void parteDaBaseETodoPatchTemAlvo() {
         assertThat(((List<?>) kustomization.get("resources")).stream().map(String::valueOf).toList())
-                .containsExactly("../../base", "rabbitmq-lan.yaml");
+                .containsExactly("../../base", "rabbitmq-lan.yaml", "metricas-lan.yaml");
         for (var patch : PATCHES) {
             final String kind = (String) patch.get("kind");
             final String nome = (String) mapa(patch, "metadata").get("name");
@@ -87,6 +87,25 @@ class AmbienteEnxutoTest {
         assertThat(podSpec.get("topologySpreadConstraints")).isNull();
         assertThat(nomesEnv(doc(PATCHES, "Deployment", "rtc-worker")))
                 .containsAll(nomesEnv(doc(PATCHES_VPS, "Deployment", "rtc-worker")));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void metricasNaRedeLocalSoParaOPrometheusESemNodePort() throws IOException {
+        final var servicos = carregar(ENXUTO.resolve("metricas-lan.yaml"));
+        final var prometheus = Files.readString(Path.of("infra/monitoramento/prometheus/prometheus.yml"),
+                StandardCharsets.UTF_8);
+        assertThat(servicos).hasSize(2).allSatisfy(svc -> {
+            final var spec = mapa(svc, "spec");
+            assertThat(spec).containsEntry("type", "LoadBalancer")
+                    .containsEntry("allocateLoadBalancerNodePorts", false);
+            assertThat((List<String>) spec.get("loadBalancerSourceRanges")).containsExactly("192.168.5.50/32");
+            final int porta = (int) ((List<Map<String, Object>>) spec.get("ports")).get(0).get("port");
+            // o Prometheus coleta exatamente a porta que o Service abre
+            assertThat(prometheus).contains("192.168.5.120:" + porta);
+        });
+        assertThat(servicos).extracting(s -> mapa(mapa(s, "spec"), "selector").get("app.kubernetes.io/name"))
+                .containsExactlyInAnyOrder("rtc-worker", "rtc-rabbit");
     }
 
     @Test
