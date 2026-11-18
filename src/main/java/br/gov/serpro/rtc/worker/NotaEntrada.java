@@ -3,6 +3,8 @@ package br.gov.serpro.rtc.worker;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+
 import br.gov.serpro.rtc.api.model.input.OperacaoInput;
 
 /**
@@ -18,7 +20,9 @@ import br.gov.serpro.rtc.api.model.input.OperacaoInput;
  *                      se informado aqui, precisa ser o mesmo
  * @param idNota        chave natural da nota (ex.: chave de acesso)
  * @param loteId        identificador da rodada à qual a nota pertence
- * @param produzidoEm   instante em que o produtor gerou a mensagem
+ * @param produzidoEm   instante em que o produtor gerou a mensagem. Metadado do envelope:
+ *                      aceita qualquer data ISO-8601 (com ou sem segundos ou fração), ao
+ *                      contrário das datas da operação, que seguem o formato estrito da API
  * @param payload       operação a calcular, com todos os itens da nota
  */
 public record NotaEntrada(
@@ -27,7 +31,7 @@ public record NotaEntrada(
         String cnpj,
         String idNota,
         String loteId,
-        OffsetDateTime produzidoEm,
+        @JsonDeserialize(using = DataHoraIsoDeserializer.class) OffsetDateTime produzidoEm,
         OperacaoInput payload) {
 
     /** Cópia com o CNPJ já validado do envelope AMQP. */

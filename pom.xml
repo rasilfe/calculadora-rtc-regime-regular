@@ -78,20 +78,11 @@
 			<artifactId>swagger-annotations-jakarta</artifactId>
 			<version>${swagger-annotations.version}</version>
 		</dependency>
-		<!-- commons-lang3 e JAXB eram trazidos de forma transitiva pelo springdoc. -->
+		<!-- commons-lang3 era trazido de forma transitiva pelo springdoc. -->
 		<dependency>
 			<groupId>org.apache.commons</groupId>
 			<artifactId>commons-lang3</artifactId>
 			<version>${commons-lang3.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>jakarta.xml.bind</groupId>
-			<artifactId>jakarta.xml.bind-api</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>org.glassfish.jaxb</groupId>
-			<artifactId>jaxb-runtime</artifactId>
-			<scope>runtime</scope>
 		</dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
@@ -153,10 +144,6 @@
 			<groupId>org.modelmapper</groupId>
 			<artifactId>modelmapper</artifactId>
 			<version>${modelmapper.version}</version>
-		</dependency>
-		<dependency>
-			<groupId>org.springframework.retry</groupId>
-			<artifactId>spring-retry</artifactId>
 		</dependency>
 	</dependencies>
 	<build>

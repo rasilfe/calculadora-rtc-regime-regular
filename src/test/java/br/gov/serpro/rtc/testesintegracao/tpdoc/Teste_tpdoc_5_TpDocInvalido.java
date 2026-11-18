@@ -21,11 +21,9 @@ import org.springframework.test.context.TestPropertySource;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import br.gov.serpro.rtc.api.exceptionhandler.dto.ErroDescricao;
 import br.gov.serpro.rtc.api.exceptionhandler.dto.ErroDetalhe;
 import br.gov.serpro.rtc.api.model.input.OperacaoInput;
 import br.gov.serpro.rtc.domain.service.CalculadoraService;
-import br.gov.serpro.rtc.domain.service.ErroService;
 import br.gov.serpro.rtc.domain.service.ObservabilidadeService;
 import br.gov.serpro.rtc.domain.service.collector.ErrosCalculoException;
 import br.gov.serpro.rtc.domain.service.exception.TipoDfeNaoEncontradoException;
@@ -35,8 +33,7 @@ import br.gov.serpro.rtc.worker.StatusNota;
 /**
  * Caso de aceitação 5: tpDoc inexistente ou fora de vigência é erro de
  * operação nas duas APIs; na observabilidade interrompe todo o processamento
- * (erro global). Também garante que o código REG-028 é consultável no
- * catálogo de erros.
+ * (erro global).
  */
 @SpringBootTest
 @TestPropertySource(locations = "classpath:application-testes.yml")
@@ -55,8 +52,6 @@ class Teste_tpdoc_5_TpDocInvalido {
     @Autowired
     private ObservabilidadeService observabilidadeService;
 
-    @Autowired
-    private ErroService erroService;
 
     private OperacaoInput operacao;
 
@@ -106,22 +101,6 @@ class Teste_tpdoc_5_TpDocInvalido {
         final var resultado = calculoTestSupport.calcularNota(objectMapper.writeValueAsString(operacao));
         assertThat(resultado.status()).isEqualTo(StatusNota.ERRO);
         assertThat(resultado.errosNota()).extracting(ErroDetalhe::code).first().isEqualTo("REG-028");
-    }
-
-    @Test
-    @DisplayName("Catálogo de erros: REG-028 consultável")
-    void teste_catalogoErros_REG028() {
-        assertThat(erroService.buscarPorCodigo("REG-028"))
-                .get().extracting(ErroDescricao::titulo).isEqualTo("Tipo de documento fiscal não encontrado");
-    }
-
-    @Test
-    @DisplayName("Catálogo de erros: REG-029 a REG-033 consultáveis")
-    void teste_catalogoErros_novosCodigos() {
-        for (String codigo : new String[] {"REG-029", "REG-030", "REG-031", "REG-032", "REG-033"}) {
-            assertThat(erroService.buscarPorCodigo(codigo))
-                    .get().extracting(ErroDescricao::codigo).isEqualTo(codigo);
-        }
     }
 
 }

@@ -138,7 +138,9 @@ Remover: `kubectl -n rtc delete user,permission,topicpermission,queue,binding -l
 }
 ```
 
-Datas com precisão de segundos (sem fração). Reenviar o mesmo `correlationId` com
+`produzidoEm` aceita qualquer data ISO-8601 com fuso (segundos e fração opcionais); as datas
+da operação (`payload`) seguem o formato estrito da API original (`yyyy-MM-dd'T'HH:mm:ssXXX`).
+`processadoEm` sai sempre como `yyyy-MM-dd'T'HH:mm:ssXXX`. Reenviar o mesmo `correlationId` com
 conteúdo diferente manda a mensagem para a DLQ.
 
 **Saída** (fila `rtc.calculo.saida.<CNPJ>`, routing key `resultado.<CNPJ>`): `ResultadoNota`,

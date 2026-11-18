@@ -6,6 +6,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonInclude;
 
 import br.gov.serpro.rtc.api.exceptionhandler.dto.ErroDetalhe;
@@ -43,7 +44,7 @@ public record ResultadoNota(
         String versaoApp,
         String versaoBase,
         Integer avisoDadosSimulados,
-        OffsetDateTime processadoEm,
+        @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd'T'HH:mm:ssXXX") OffsetDateTime processadoEm,
         long duracaoMs,
         List<ErroDetalhe> errosNota,
         ObservabilidadeROCDomain resultado) {

@@ -19,15 +19,6 @@ import java.util.List;
 @Repository
 public interface MunicipioRepository extends JpaRepository<Municipio, Long> {
 
-    @Query("""
-            SELECT COUNT(m) > 0
-            FROM Municipio m
-            WHERE m.codigo = :codigo AND LOWER(m.uf.sigla) = LOWER(:uf)
-            """)
-    boolean existe(
-            @Param("codigo") Long codigo,
-            @Param("uf") String uf);
-
     @Query("FROM Municipio m WHERE LOWER(m.uf.sigla) = LOWER(:uf)")
     List<Municipio> consultarTodosPorSiglaUf(
             @Param("uf") String uf);

@@ -4,7 +4,6 @@
 package br.gov.serpro.rtc.domain.repository;
 
 import java.time.LocalDate;
-import java.util.List;
 
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -21,17 +20,6 @@ import br.gov.serpro.rtc.domain.model.entity.SituacaoTributaria;
  */
 @Repository
 public interface SituacaoTributariaRepository extends JpaRepository<SituacaoTributaria, Long> {
-
-	@Query("""
-			SELECT t.situacaoTributaria
-			FROM TributoSituacaoTributaria t
-			WHERE t.tributo.id = :idTributo
-			AND t.inicioVigencia <= :data
-			AND (t.fimVigencia IS NULL OR t.fimVigencia >= :data)
-			""")
-	List<SituacaoTributaria> consultarPorIdTributo(
-			@Param("idTributo") Long idTributo,
-			@Param("data") LocalDate data);
 
 	/*
 	 * Entradas recomendadas na cache: 240

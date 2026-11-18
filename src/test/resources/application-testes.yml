@@ -81,6 +81,18 @@ server:
 
 cache:
   specs:
+    - name: AliquotaAdValoremProdutoRepository.existeNcmAdValorem
+      expireAfterAccess: "P1D"
+      initialCapacity: 1000 # chave: NCM + data
+      maximumSize: 10_000
+    - name: AliquotaAdValoremServicoRepository.existeNbsAdValorem
+      expireAfterAccess: "P1D"
+      initialCapacity: 1000 # chave: NBS + data
+      maximumSize: 10_000
+    - name: NomenclaturaService.determinarNomenclatura
+      expireAfterAccess: "P1D"
+      initialCapacity: 1000 # chave: classificação + tipo de DF-e
+      maximumSize: 2_000
     - name: AliquotaAdRemProdutoRepository.buscarAliquotaAdRem
       expireAfterAccess: "P1D"
       initialCapacity: 84_000 # 16MB
@@ -133,18 +145,6 @@ cache:
       expireAfterAccess: "P1D"
       initialCapacity: 400 # ~45KB
       maximumSize: 400
-    - name: NbsAplicavelRepository.listarNbsAplicaveisPorClassificacao
-      expireAfterAccess: "P1D"
-      initialCapacity: 50
-      maximumSize: 50
-    - name: NbsAplicavelRepository.listarCodigosClassificacoesVinculadasPorNbs
-      expireAfterAccess: "P1D"
-      initialCapacity: 50
-      maximumSize: 50
-    - name: NbsAplicavelRepository.existeVinculoParaClassificacao
-      expireAfterAccess: "P1D"
-      initialCapacity: 50
-      maximumSize: 50
     - name: NbsRepository.existeNbs
       expireAfterAccess: "P1D"
       initialCapacity: 1_800 # ~220KB
@@ -225,30 +225,14 @@ cache:
       expireAfterAccess: "P1D"
       initialCapacity: 50
       maximumSize: 50
-    - name: TratamentoClassificacaoRepository.consultarValidadeDfeClassificacaoTributaria
-      expireAfterAccess: "P1D"
-      initialCapacity: 50
-      maximumSize: 50
-    - name: XmlUtil.getSchema
-      expireAfterAccess: "P30D"
-      initialCapacity: 30
-      maximumSize: 30
     - name: RedutorCompraGovernamentalRepository.buscarValorRedutor
       expireAfterAccess: "P1D"
       initialCapacity: 50
       maximumSize: 50
-    - name: RedutorCompraGovernamentalRepository.buscarTodos
-      expireAfterAccess: "P1D"
-      initialCapacity: 1
-      maximumSize: 1
     - name: TransferenciaCBSRepository.getPercentualTransferencia
       expireAfterAccess: "P1D"
       initialCapacity: 50
       maximumSize: 50
-    - name: TransferenciaCBSRepository.buscarTodos
-      expireAfterAccess: "P1D"
-      initialCapacity: 1
-      maximumSize: 1
     
 management:
   endpoints:
