@@ -1,0 +1,137 @@
+# PostgreSQL da base de regras dentro do cluster (VPS de nó único).
+#
+# Secret esperado (criado pelo administrador antes do primeiro deploy):
+#   kubectl -n rtc create secret generic rtc-postgres \
+#     --from-literal=senha-admin=... --from-literal=senha-migracao=... --from-literal=senha-leitura=...
+#
+# Na PRIMEIRA inicialização (volume vazio), o script abaixo cria:
+#   - rtc_migracao: dono do banco da versão da base (usado pelo Job de migração);
+#   - rtc_leitura: somente SELECT (usado pelos workers);
+#   - o banco RTC_DB_NAME.
+# Para uma nova versão da base, crie o banco novo à mão (ver k8s/README.md).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rtc-postgres-init
+  namespace: rtc
+data:
+  RTC_DB_NAME: calculadora_pro_v0059
+  01-usuarios-e-banco.sh: |
+    #!/bin/sh
+    set -eu
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres \
+      -v migracao="$RTC_MIGRACAO_PASSWORD" -v leitura="$RTC_LEITURA_PASSWORD" -v banco="$RTC_DB_NAME" <<'SQL'
+    CREATE ROLE rtc_migracao LOGIN PASSWORD :'migracao';
+    CREATE ROLE rtc_leitura LOGIN PASSWORD :'leitura';
+    CREATE DATABASE :"banco" OWNER rtc_migracao;
+    REVOKE ALL ON DATABASE :"banco" FROM PUBLIC;
+    GRANT CONNECT ON DATABASE :"banco" TO rtc_migracao, rtc_leitura;
+    \connect :"banco"
+    GRANT USAGE ON SCHEMA public TO rtc_leitura;
+    -- tabelas criadas pelo Flyway (como rtc_migracao) ficam legíveis por rtc_leitura
+    ALTER DEFAULT PRIVILEGES FOR ROLE rtc_migracao IN SCHEMA public GRANT SELECT ON TABLES TO rtc_leitura;
+    SQL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rtc-postgres
+  namespace: rtc
+  labels:
+    app.kubernetes.io/name: rtc-postgres
+spec:
+  selector:
+    app.kubernetes.io/name: rtc-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rtc-postgres
+  namespace: rtc
+  labels:
+    app.kubernetes.io/name: rtc-postgres
+spec:
+  serviceName: rtc-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rtc-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rtc-postgres
+    spec:
+      securityContext:
+        runAsUser: 70        # usuário postgres da imagem alpine
+        runAsGroup: 70
+        fsGroup: 70
+      containers:
+        - name: postgres
+          image: postgres:17-alpine
+          args:
+            # base pequena e quase toda em cache no worker: poucas conexões e memória moderada
+            - -c
+            - max_connections=50
+            - -c
+            - shared_buffers=256MB
+            - -c
+            - effective_cache_size=768MB
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: rtc-postgres, key: senha-admin } }
+            - name: RTC_MIGRACAO_PASSWORD
+              valueFrom: { secretKeyRef: { name: rtc-postgres, key: senha-migracao } }
+            - name: RTC_LEITURA_PASSWORD
+              valueFrom: { secretKeyRef: { name: rtc-postgres, key: senha-leitura } }
+            - name: RTC_DB_NAME
+              valueFrom: { configMapKeyRef: { name: rtc-postgres-init, key: RTC_DB_NAME } }
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            periodSeconds: 20
+            failureThreshold: 6
+          volumeMounts:
+            - name: dados
+              mountPath: /var/lib/postgresql/data
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: init
+          configMap:
+            name: rtc-postgres-init
+            # executável: o entrypoint roda o script num processo próprio (sem execução, ele
+            # faria "source" e o set -eu do script valeria para o entrypoint)
+            defaultMode: 0555
+            items:
+              - key: 01-usuarios-e-banco.sh
+                path: 01-usuarios-e-banco.sh
+  volumeClaimTemplates:
+    - metadata:
+        name: dados
+      spec:
+        storageClassName: local-path
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 10Gi

@@ -1,0 +1,23 @@
+# RabbitMQ com 1 réplica. As filas quorum funcionam com um único membro; o que se perde
+# em relação aos 3 nós é a tolerância à queda do nó (que, numa VPS, derruba tudo de qualquer forma).
+apiVersion: rabbitmq.com/v1beta1
+kind: RabbitmqCluster
+metadata:
+  name: rtc-rabbit
+  namespace: rtc
+spec:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      memory: 2Gi
+  persistence:
+    storage: 10Gi
+  rabbitmq:
+    additionalConfig: |
+      vm_memory_high_watermark.relative = 0.6
+      disk_free_limit.absolute = 1GB
+  # Sem anti-affinity: com ela, réplicas extras ficariam pendentes num nó só.
+  affinity: null

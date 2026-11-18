@@ -37,8 +37,10 @@ class ManifestosK8sTest {
     @BeforeAll
     static void carregar() throws IOException {
         try (Stream<Path> arquivos = Files.walk(RAIZ)) {
+            // ambientes/ contém overlays (patches que repetem tipo e nome da base): ver AmbienteVpsTest
             for (Path arquivo : arquivos.filter(p -> p.toString().endsWith(".yaml"))
-                    .filter(p -> !p.equals(MODELO_EMPRESA)).toList()) {
+                    .filter(p -> !p.equals(MODELO_EMPRESA))
+                    .filter(p -> !p.startsWith(RAIZ.resolve("ambientes"))).toList()) {
                 try (Reader r = Files.newBufferedReader(arquivo, StandardCharsets.UTF_8)) {
                     DOCUMENTOS.addAll(carregarTodos(r, arquivo.toString()));
                 }

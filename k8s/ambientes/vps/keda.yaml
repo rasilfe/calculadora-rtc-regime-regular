@@ -1,0 +1,10 @@
+# Com 4 vCPU, mais de 2 pods do worker só disputariam a mesma CPU. O segundo pod
+# entra quando há fila acumulada (e cobre o rolling update).
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: rtc-worker
+  namespace: rtc
+spec:
+  minReplicaCount: 1
+  maxReplicaCount: 2

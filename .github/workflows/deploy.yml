@@ -126,6 +126,9 @@ jobs:
         with:
           imagem: ${{ needs.imagem.outputs.imagem }}
           digest: ${{ needs.imagem.outputs.digest }}
+          # variável do environment: k8s (3 nós, padrão) ou k8s/ambientes/vps (nó único)
+          manifestos: ${{ vars.K8S_MANIFESTOS || 'k8s' }}
+          pre-requisitos: ${{ vars.K8S_PRE_REQUISITOS }}
 
   producao:
     name: Deploy em produção
@@ -146,3 +149,6 @@ jobs:
         with:
           imagem: ${{ needs.imagem.outputs.imagem }}
           digest: ${{ needs.imagem.outputs.digest }}
+          # variável do environment: k8s (3 nós, padrão) ou k8s/ambientes/vps (nó único)
+          manifestos: ${{ vars.K8S_MANIFESTOS || 'k8s' }}
+          pre-requisitos: ${{ vars.K8S_PRE_REQUISITOS }}

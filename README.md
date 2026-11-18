@@ -28,6 +28,7 @@ Referência de vazão (uma JVM, 16 CPUs, 8 consumidores): **8.000 notas / 70.000
 | Assunto | Onde |
 |---|---|
 | Implantação no k3s, contrato das mensagens, cadastro de empresas, garantias e observabilidade | [k8s/README.md](k8s/README.md) |
+| Rodar tudo em **uma VPS** (4 vCPU, 16 GB): overlay de nó único com PostgreSQL no cluster | [k8s/README.md#vps-de-nó-único](k8s/README.md#vps-de-nó-único) |
 | Base de regras em PostgreSQL e atualização a cada release do upstream | [flyway/postgres/README.md](flyway/postgres/README.md) |
 
 ---

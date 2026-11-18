@@ -11,12 +11,19 @@ A fila de entrada é compartilhada (um único ponto de escalonamento para o KEDA
 saída é uma por empresa. Mensagens ilegíveis ou que falham repetidamente vão para
 `rtc.dlx` → `*.dlq`.
 
+## Ambientes
+
+| Diretório | Para quê |
+|---|---|
+| `k8s/` | Cluster de **3 nós**: RabbitMQ com 3 réplicas em nós diferentes, worker de 2 a 12 pods, PostgreSQL externo |
+| `k8s/ambientes/vps` + `k8s/ambientes/vps/banco` | **Nó único** (VPS de 4 vCPU e 16 GB): RabbitMQ com 1 réplica, worker de 1 a 2 pods, PostgreSQL no próprio cluster. Ver [VPS de nó único](#vps-de-nó-único) |
+
 ## Pré-requisitos no cluster
 
-- RabbitMQ Cluster Operator e Messaging Topology Operator
+- RabbitMQ Cluster Operator e Messaging Topology Operator (este exige o cert-manager)
 - KEDA 2.x
 - StorageClass `local-path` (padrão do k3s) para o RabbitMQ
-- PostgreSQL acessível pelo cluster (gerenciado ou operador de sua escolha)
+- PostgreSQL acessível pelo cluster (no ambiente VPS, ele roda no próprio cluster)
 - Opcional: coletor OTLP/Jaeger em `jaeger-collector.observability.svc:4318` e Prometheus
 
 ## Preparação do cluster (uma vez, pelo administrador)
@@ -187,3 +194,100 @@ RabbitMQ, de `rtc.calculo.entrada.dlq` para a exchange `rtc.calculo.in`, preserv
 routing key `nota.<CNPJ>` e o header `x-cnpj` originais. A `rtc.calculo.saida.dlq` reúne
 resultados mortos de todas as empresas (routing key `resultado.<CNPJ>` preservada) e é
 acessível só pela operação.
+
+## VPS de nó único
+
+Para uma VPS com **4 vCPU e 16 GB de RAM** (Debian 12 ou 13). Tudo roda na mesma máquina:
+k3s, RabbitMQ (1 réplica), PostgreSQL, Redis, worker (1 a 2 pods) e, opcionalmente, o runner
+do GitHub.
+
+| Componente | Reserva (CPU / RAM) | Limite de RAM |
+|---|---|---|
+| Sistema (k3s, operadores, KEDA, cert-manager) | ~0,5 / ~2 GB (estimativa) | — |
+| RabbitMQ | 500m / 1 GiB | 2 GiB |
+| PostgreSQL | 250m / 512 MiB | 1 GiB |
+| Redis | 100m / 128 MiB | 256 MiB |
+| Worker (por pod, até 2) | 1 / 1,5 GiB | 2 GiB |
+
+O `AmbienteVpsTest` falha se os recursos do overlay deixarem de caber na VPS.
+
+**Vazão esperada:** o cálculo usa cerca de 0,5 ms de CPU por item, então uma rodada de
+70.000 itens (≈35 s de CPU) deve levar na faixa de **12 a 20 s** com ~3 vCPU livres para os
+workers. É estimativa; meça na VPS com uma rodada real.
+
+### 1. k3s
+
+```bash
+sudo apt update && sudo apt install -y curl ca-certificates chrony
+sudo swapoff -a && sudo sed -i '/\sswap\s/s/^/#/' /etc/fstab
+echo 'fs.file-max = 1000000' | sudo tee /etc/sysctl.d/90-k3s.conf && sudo sysctl --system
+sudo mkdir -p /etc/rancher/k3s && printf 'disable:\n  - traefik\nwrite-kubeconfig-mode: "0600"\ntls-san:\n  - <ip-ou-dns-da-vps>\n' | sudo tee /etc/rancher/k3s/config.yaml
+curl -sfL https://get.k3s.io | INSTALL_K3S_CHANNEL=stable sh -s - server
+```
+
+Com um nó só não é preciso `cluster-init`: o banco embutido padrão do k3s é mais leve que o etcd.
+
+**Firewall:** exponha só SSH e, se precisar administrar de fora, a porta 6443 restrita ao seu IP.
+O RabbitMQ fica interno ao cluster (veja "Acesso das empresas" abaixo).
+
+### 2. Ferramentas e preparação
+
+Instale o cert-manager, os operadores do RabbitMQ e o KEDA como na instalação geral e depois:
+
+```bash
+kubectl apply -f k8s/00-namespace.yaml -f k8s/deploy/rbac.yaml
+
+# senhas do PostgreSQL do cluster (o script de inicialização cria rtc_migracao e rtc_leitura)
+kubectl -n rtc create secret generic rtc-postgres \
+  --from-literal=senha-admin=<forte> --from-literal=senha-migracao=<forte-1> --from-literal=senha-leitura=<forte-2>
+
+# mesmas credenciais, no formato que o worker e o Job de migração esperam
+kubectl -n rtc create secret generic rtc-db-migracao --from-literal=host=rtc-postgres.rtc.svc \
+  --from-literal=name=calculadora_pro_v0059 --from-literal=user=rtc_migracao --from-literal=password=<forte-1>
+kubectl -n rtc create secret generic rtc-db --from-literal=host=rtc-postgres.rtc.svc \
+  --from-literal=name=calculadora_pro_v0059 --from-literal=user=rtc_leitura --from-literal=password=<forte-2>
+```
+
+O nome do banco (`calculadora_pro_v0059`) precisa ser o mesmo do ConfigMap em
+`k8s/ambientes/vps/banco/postgres.yaml`. O script de usuários só roda na primeira
+inicialização; para uma nova versão da base, crie o banco novo à mão:
+
+```bash
+kubectl -n rtc exec -it rtc-postgres-0 -- psql -U postgres -c 'CREATE DATABASE calculadora_pro_v0060 OWNER rtc_migracao' \
+  -c 'REVOKE ALL ON DATABASE calculadora_pro_v0060 FROM PUBLIC' \
+  -c 'GRANT CONNECT ON DATABASE calculadora_pro_v0060 TO rtc_migracao, rtc_leitura'
+kubectl -n rtc exec -it rtc-postgres-0 -- psql -U postgres -d calculadora_pro_v0060 \
+  -c 'ALTER DEFAULT PRIVILEGES FOR ROLE rtc_migracao IN SCHEMA public GRANT SELECT ON TABLES TO rtc_leitura'
+```
+
+### 3. Deploy pelo GitHub Actions
+
+No environment (ex.: `homologacao`), em *Settings → Environments → Variables*:
+
+| Variável | Valor |
+|---|---|
+| `K8S_MANIFESTOS` | `k8s/ambientes/vps` |
+| `K8S_PRE_REQUISITOS` | `k8s/ambientes/vps/banco` |
+
+O deploy aplica o PostgreSQL primeiro, espera ficar pronto, roda o Job de migração e só então
+aplica o restante. O runner self-hosted pode rodar na própria VPS (serviço systemd), com o
+kubeconfig da ServiceAccount `rtc-deployer` apontando para `https://127.0.0.1:6443`.
+
+Deploy manual, sem o GitHub:
+
+```bash
+kubectl apply -k k8s/ambientes/vps/banco && kubectl -n rtc rollout status statefulset/rtc-postgres
+```
+
+```bash
+kubectl apply -k k8s/ambientes/vps
+```
+
+### Limitações deste ambiente
+
+- **Sem redundância:** se a VPS cair, tudo para. As mensagens persistidas no RabbitMQ e os
+  dados do PostgreSQL voltam com ela; faça backup do PostgreSQL e dos snapshots do k3s fora da VPS.
+- **Acesso das empresas:** o RabbitMQ não é exposto para fora do cluster. Para empresas
+  publicarem pela internet, é preciso expor o AMQP com **TLS** (porta 5671), por exemplo com
+  `spec.service.type: LoadBalancer` e `spec.tls` no `RabbitmqCluster` e um certificado do
+  cert-manager. Ainda não está nos manifestos.

@@ -1,0 +1,8 @@
+# Com 1 réplica mínima, um PDB minAvailable=1 impediria o drain do único nó
+# (manutenção, atualização do k3s). Removido neste ambiente.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rtc-worker
+  namespace: rtc
+$patch: delete
