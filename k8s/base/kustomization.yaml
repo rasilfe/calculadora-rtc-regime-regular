@@ -1,0 +1,22 @@
+# Base dos manifestos (cluster de 3 nós). Fica num diretório próprio para que os overlays
+# de k8s/ambientes/ partam dela sem conter a si mesmos (o kustomize 5.8+ recusa esse ciclo).
+# kubectl apply -k k8s/   (o deploy pelo GitHub Actions faz isso; ver .github/workflows/deploy.yml)
+# Ficam fora (em k8s/) e são aplicados à parte:
+#   00-namespace.yaml e deploy/rbac.yaml  - uma vez, pelo administrador do cluster
+#   migracao/job.yaml                     - a cada deploy, antes dos manifestos
+#   empresas/                             - no cadastro de cada empresa
+#   consumidor/                           - exemplo
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: rtc
+resources:
+  - rabbitmq/cluster.yaml
+  - rabbitmq/topologia.yaml
+  - redis/redis.yaml
+  - worker/deployment.yaml
+  - worker/keda.yaml
+images:
+  # O deploy troca newTag pelo digest da imagem publicada.
+  - name: calculadora-rtc-worker
+    newName: ghcr.io/rasilfe/calculadora-rtc-worker
+    newTag: "1.6.1"

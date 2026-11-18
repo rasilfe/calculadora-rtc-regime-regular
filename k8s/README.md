@@ -15,8 +15,12 @@ saída é uma por empresa. Mensagens ilegíveis ou que falham repetidamente vão
 
 | Diretório | Para quê |
 |---|---|
-| `k8s/` | Cluster de **3 nós**: RabbitMQ com 3 réplicas em nós diferentes, worker de 2 a 12 pods, PostgreSQL externo |
+| `k8s/` (manifestos em `k8s/base/`) | Cluster de **3 nós**: RabbitMQ com 3 réplicas em nós diferentes, worker de 2 a 12 pods, PostgreSQL externo |
 | `k8s/ambientes/vps` + `k8s/ambientes/vps/banco` | **Nó único** (VPS de 4 vCPU e 16 GB): RabbitMQ com 1 réplica, worker de 1 a 2 pods, PostgreSQL no próprio cluster. Ver [VPS de nó único](#vps-de-nó-único) |
+| `k8s/ambientes/enxuto` + `k8s/ambientes/enxuto/banco` | **Nó único de ~6 GB** (ex.: VM num Proxmox que divide o host com outras VMs): como o vps, mas com 1 worker e limites de memória menores. Ver [Nó enxuto](#nó-enxuto-6-gb) |
+
+Os overlays partem de `k8s/base/`, e não de `k8s/`: o kustomize 5.8+ (o do kubectl do k3s)
+recusa um overlay que fica dentro da raiz da própria base.
 
 ## Pré-requisitos no cluster
 
@@ -291,3 +295,35 @@ kubectl apply -k k8s/ambientes/vps
   publicarem pela internet, é preciso expor o AMQP com **TLS** (porta 5671), por exemplo com
   `spec.service.type: LoadBalancer` e `spec.tls` no `RabbitmqCluster` e um certificado do
   cert-manager. Ainda não está nos manifestos.
+
+## Nó enxuto (6 GB)
+
+Para uma VM de 4 vCPU e cerca de 6 GB de RAM, por exemplo num host Proxmox de 16 GB que
+também roda outras VMs. O preparo é o mesmo da [VPS de nó único](#vps-de-nó-único);
+mudam só os diretórios:
+
+| Variável do environment | Valor |
+|---|---|
+| `K8S_MANIFESTOS` | `k8s/ambientes/enxuto` |
+| `K8S_PRE_REQUISITOS` | `k8s/ambientes/enxuto/banco` |
+
+Diferenças em relação ao vps:
+
+- **1 pod do worker** (KEDA de 1 a 1), com limite de 1,5 GiB (heap de cerca de 1 GiB);
+- **rollout sem pod extra** (`maxSurge: 0`): durante o deploy o worker fica fora por
+  alguns segundos e as notas esperam na fila;
+- RabbitMQ com limite de 1 GiB e disco de 5 GiB; PostgreSQL com limite de 768 MiB e
+  `max_connections=30`.
+
+Com 3 consumidores num pod só, a vazão é de cerca de um terço da do vps. Serve para
+homologação e volumes pequenos.
+
+No k3s, reserve memória para o sistema, para o kubelet despejar pods antes de o kernel
+matar processos (`/etc/rancher/k3s/config.yaml`):
+
+```yaml
+kubelet-arg:
+  - "system-reserved=cpu=250m,memory=512Mi"
+  - "kube-reserved=cpu=250m,memory=512Mi"
+  - "eviction-hard=memory.available<200Mi"
+```

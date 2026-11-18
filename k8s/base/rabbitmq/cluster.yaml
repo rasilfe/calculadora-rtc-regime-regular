@@ -7,7 +7,9 @@ metadata:
   namespace: rtc
 spec:
   replicas: 3
-  image: rabbitmq:4.1-management
+  # 4.2+: o Cluster Operator 2.23+ usa na startup probe o endpoint
+  # /api/health/checks/reached-target-cluster-size, que não existe na 4.1 (pod reinicia em loop).
+  image: rabbitmq:4.2-management
   resources:
     requests:
       cpu: "1"

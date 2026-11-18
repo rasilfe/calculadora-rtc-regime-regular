@@ -113,16 +113,18 @@ jobs:
           set -euo pipefail
           CATALOGO='https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
           valida() { kubeconform -strict -summary -schema-location default -schema-location "$CATALOGO" "$@"; }
-          kubectl kustomize k8s/ > /tmp/base.yaml
+          kustomize build k8s/ > /tmp/base.yaml
           valida /tmp/base.yaml
-          # overlay de nó único (VPS)
-          kubectl kustomize k8s/ambientes/vps > /tmp/vps.yaml
-          kubectl kustomize k8s/ambientes/vps/banco > /tmp/vps-banco.yaml
-          valida /tmp/vps.yaml /tmp/vps-banco.yaml
-          grep -q "replicas: 1" /tmp/vps.yaml
-          if grep -q "kind: PodDisruptionBudget" /tmp/vps.yaml && grep -A3 "kind: PodDisruptionBudget" /tmp/vps.yaml | grep -q "name: rtc-worker"; then
-            echo "::error::overlay vps não removeu o PDB do worker"; exit 1
-          fi
+          # overlays de nó único: vps (4 vCPU, 16 GB) e enxuto (VM de ~6 GB)
+          for amb in vps enxuto; do
+            kustomize build "k8s/ambientes/$amb" > "/tmp/$amb.yaml"
+            kustomize build "k8s/ambientes/$amb/banco" > "/tmp/$amb-banco.yaml"
+            valida "/tmp/$amb.yaml" "/tmp/$amb-banco.yaml"
+            grep -q "replicas: 1" "/tmp/$amb.yaml"
+            if grep -A3 "kind: PodDisruptionBudget" "/tmp/$amb.yaml" | grep -q "name: rtc-worker"; then
+              echo "::error::overlay $amb não removeu o PDB do worker"; exit 1
+            fi
+          done
           valida k8s/00-namespace.yaml k8s/deploy/rbac.yaml k8s/migracao/job.yaml k8s/consumidor/scaledobject-exemplo.yaml
           # modelo de empresa renderizado com um CNPJ numérico e um alfanumérico
           ./k8s/empresas/gerar-empresa.sh 11.222.333/0001-81 > /tmp/empresa-num.yaml

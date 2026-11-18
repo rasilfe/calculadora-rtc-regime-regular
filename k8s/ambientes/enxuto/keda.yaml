@@ -1,0 +1,9 @@
+# Sem memória para um segundo pod: o KEDA mantém exatamente 1 réplica.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: rtc-worker
+  namespace: rtc
+spec:
+  minReplicaCount: 1
+  maxReplicaCount: 1

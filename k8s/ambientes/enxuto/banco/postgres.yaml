@@ -1,0 +1,24 @@
+# Base de regras pequena (30 mil linhas) e quase toda em cache no worker.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rtc-postgres
+  namespace: rtc
+spec:
+  template:
+    spec:
+      containers:
+        - name: postgres
+          args:
+            - -c
+            - max_connections=30
+            - -c
+            - shared_buffers=128MB
+            - -c
+            - effective_cache_size=384MB
+          resources:
+            requests:
+              cpu: 250m
+              memory: 384Mi
+            limits:
+              memory: 768Mi

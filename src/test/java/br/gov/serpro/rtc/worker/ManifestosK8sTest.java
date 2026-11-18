@@ -61,9 +61,13 @@ class ManifestosK8sTest {
 
     @Test
     void kustomizationListaArquivosExistentes() {
-        final var kustomization = unico(DOCUMENTOS, "Kustomization", null);
-        for (Object recurso : (List<?>) kustomization.get("resources")) {
-            assertThat(RAIZ.resolve(recurso.toString())).exists();
+        final var kustomizations = doTipo(DOCUMENTOS, "Kustomization");
+        assertThat(kustomizations).hasSize(2);
+        for (var kustomization : kustomizations) {
+            final Path dir = Path.of(kustomization.get("__arquivo").toString()).getParent();
+            for (Object recurso : (List<?>) kustomization.get("resources")) {
+                assertThat(dir.resolve(recurso.toString())).exists();
+            }
         }
     }
 

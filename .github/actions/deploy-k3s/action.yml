@@ -57,9 +57,9 @@ runs:
         sed -i -E \
           -e "s|^(\s*newName:).*|\1 ${{ inputs.imagem }}|" \
           -e "s|^(\s*)newTag:.*|\1digest: ${{ inputs.digest }}|" \
-          k8s/kustomization.yaml
+          k8s/base/kustomization.yaml
         sed -i -E "s|^(\s*image:) calculadora-rtc-worker\s*$|\1 $REF|" k8s/migracao/job.yaml
-        grep -n "digest:" k8s/kustomization.yaml
+        grep -n "digest:" k8s/base/kustomization.yaml
         grep -n "image:" k8s/migracao/job.yaml
 
     - name: "Pré-requisitos da migração (ex.: PostgreSQL no cluster)"

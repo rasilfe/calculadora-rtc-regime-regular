@@ -25,8 +25,8 @@ import org.yaml.snakeyaml.Yaml;
  */
 class AmbienteVpsTest {
 
-    private static final Path BASE = Path.of("k8s");
-    private static final Path VPS = BASE.resolve("ambientes/vps");
+    private static final Path BASE = Path.of("k8s/base");
+    private static final Path VPS = Path.of("k8s/ambientes/vps");
     private static final Path BANCO = VPS.resolve("banco");
 
     /** Capacidade da VPS, descontada uma reserva para k3s, operadores, KEDA e cert-manager. */
@@ -55,7 +55,7 @@ class AmbienteVpsTest {
 
     @Test
     void overlayUsaABaseETodoPatchApontaParaUmRecursoDela() {
-        assertThat(((List<?>) kustomization.get("resources")).stream().map(String::valueOf).toList()).containsExactly("../../");
+        assertThat(((List<?>) kustomization.get("resources")).stream().map(String::valueOf).toList()).containsExactly("../../base");
         assertThat(kustomization).containsEntry("namespace", "rtc");
         for (var patch : PATCHES) {
             final String kind = (String) patch.get("kind");

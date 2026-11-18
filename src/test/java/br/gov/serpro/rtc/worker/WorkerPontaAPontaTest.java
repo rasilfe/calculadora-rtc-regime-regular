@@ -66,7 +66,7 @@ class WorkerPontaAPontaTest {
     private static final String EMPRESA_B = "12ABC34501DE35";
     private static final Duration ESPERA = Duration.ofSeconds(30);
 
-    /** Broker em memória e topologia equivalente à de k8s/rabbitmq/topologia.yaml. */
+    /** Broker em memória e topologia equivalente à de k8s/base/rabbitmq/topologia.yaml. */
     @TestConfiguration
     static class Broker {
         /**
