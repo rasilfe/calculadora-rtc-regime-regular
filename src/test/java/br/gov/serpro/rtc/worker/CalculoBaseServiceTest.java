@@ -3,6 +3,7 @@ package br.gov.serpro.rtc.worker;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -13,6 +14,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import br.gov.serpro.rtc.api.exceptionhandler.dto.ErroDetalhe;
 import br.gov.serpro.rtc.api.model.input.basecalculo.BaseCalculoUnificadaInput;
+import br.gov.serpro.rtc.api.model.input.basecalculo.BaseCalculoUnificadaNfseInput;
+import br.gov.serpro.rtc.domain.service.basecalculo.BaseCalculoUnificadaNfseService;
 import br.gov.serpro.rtc.domain.service.basecalculo.BaseCalculoUnificadaService;
 import jakarta.validation.Validation;
 
@@ -27,7 +30,7 @@ class CalculoBaseServiceTest {
 
     @BeforeAll
     static void criar() {
-        service = new CalculoBaseService(new BaseCalculoUnificadaService(),
+        service = new CalculoBaseService(new BaseCalculoUnificadaService(), new BaseCalculoUnificadaNfseService(),
                 Validation.buildDefaultValidatorFactory().getValidator(), "9.9.9", "https://erros.exemplo");
     }
 
@@ -52,6 +55,8 @@ class CalculoBaseServiceTest {
         assertThat(r.idCalculo()).isEqualTo("item-1");
         assertThat(r.versaoApp()).isEqualTo("9.9.9");
         assertThat(r.processadoEm()).isNotNull();
+        assertThat(r.tipo()).isEqualTo(TipoBaseCalculo.UNIFICADA);
+        assertThat(r.resultadoNfse()).isNull();
     }
 
     @Test
@@ -90,6 +95,85 @@ class CalculoBaseServiceTest {
             assertThat(e.pointer()).isEqualTo("#/tipoDocumento");
             assertThat(e.detail()).contains("55", "65");
         });
+    }
+
+    // ─── NFS-e: algoritmo oficial do endpoint base-calculo-unificada-nfse ─────────
+
+    @Test
+    void nfseCalculaComOAlgoritmoOficial() {
+        // cenário 1 do teste oficial: 100 - 5 (desconto) - 5 (ISSQN) - 5 (PIS) - 5 (COFINS)
+        final ResultadoBaseCalculo r = service.calcular(pedidoNfse(Map.of("anoFatoGerador", 2026, "opSimpNac", 1,
+                "situacao", "comum", "vServ", "100.00", "vDescIncond", "5.00", "vISSQN", "5.00", "vPIS", "5.00",
+                "vCOFINS", "5.00")));
+
+        assertThat(r.status()).isEqualTo(ResultadoBaseCalculo.Status.SUCESSO);
+        assertThat(r.tipo()).isEqualTo(TipoBaseCalculo.NFSE);
+        assertThat(r.erros()).isNull();
+        assertThat(r.resultado()).isNull();
+        assertThat(r.resultadoNfse().getBaseRG()).isEqualByComparingTo("80.00");
+        assertThat(r.resultadoNfse().getBaseSN()).isNull();
+        assertThat(r.idCalculo()).isEqualTo("nfse-1");
+    }
+
+    @Test
+    void nfseOptanteDoSimplesTrazABaseSN() {
+        final ResultadoBaseCalculo r = service.calcular(pedidoNfse(Map.of("anoFatoGerador", 2027, "opSimpNac", 3,
+                "regApIBSCBSSN", 1, "situacao", "comum", "vServ", "100.00", "vDescIncond", "10.00", "vISSQN", "5.00")));
+
+        assertThat(r.status()).isEqualTo(ResultadoBaseCalculo.Status.SUCESSO);
+        assertThat(r.resultadoNfse().getBaseRG()).isEqualByComparingTo("85.00");
+        assertThat(r.resultadoNfse().getBaseSN()).isEqualByComparingTo("90.00");
+    }
+
+    @Test
+    void erroDeNegocioDaNfseVoltaComAsBasesApuradas() {
+        // E1534: ajustes que igualam ou superam o valor do serviço
+        final ResultadoBaseCalculo r = service.calcular(pedidoNfse(Map.of("anoFatoGerador", 2026, "opSimpNac", 1,
+                "situacao", "comum", "vServ", "100.00",
+                "documentos", List.of(Map.of("tpAjusteBC", "101", "vAjusteAplic", "110.00")))));
+
+        assertThat(r.status()).isEqualTo(ResultadoBaseCalculo.Status.ERRO);
+        assertThat(r.erros()).extracting(ErroDetalhe::code).containsExactly("E1534", "BASE-NEGATIVA");
+        assertThat(r.erros()).allSatisfy(e -> assertThat(e.type()).endsWith("codigo=" + e.code()));
+        assertThat(r.resultadoNfse().getBaseRG()).isEqualByComparingTo("-10.00");
+        assertThat(r.resultadoNfse().getErros()).extracting(e -> e.codigo()).containsExactly("E1534", "BASE-NEGATIVA");
+    }
+
+    @Test
+    void nfseSemCampoObrigatorioViraErroDeValidacao() {
+        final ResultadoBaseCalculo r = service.calcular(pedidoNfse(Map.of("anoFatoGerador", 2026, "situacao", "comum",
+                "vServ", "100.00")));
+
+        assertThat(r.status()).isEqualTo(ResultadoBaseCalculo.Status.ERRO);
+        assertThat(r.resultadoNfse()).isNull();
+        assertThat(r.erros()).extracting(ErroDetalhe::pointer).containsExactly("#/opSimpNac");
+    }
+
+    @Test
+    void nfseDocumentoDeAjusteInvalidoApontaParaODocumento() {
+        final ResultadoBaseCalculo r = service.calcular(pedidoNfse(Map.of("anoFatoGerador", 2026, "opSimpNac", 1,
+                "situacao", "comum", "vServ", "100.00",
+                "documentos", List.of(Map.of("tpAjusteBC", "101", "vAjusteAplic", "-1")))));
+
+        assertThat(r.status()).isEqualTo(ResultadoBaseCalculo.Status.ERRO);
+        assertThat(r.erros()).extracting(ErroDetalhe::pointer).containsExactly("#/documentos[0]/vAjusteAplic");
+    }
+
+    @Test
+    void locacaoSemOGrupoLocacaoEhRecusada() {
+        final ResultadoBaseCalculo r = service.calcular(pedidoNfse(Map.of("anoFatoGerador", 2026, "opSimpNac", 1,
+                "situacao", "locacao9903")));
+
+        assertThat(r.status()).isEqualTo(ResultadoBaseCalculo.Status.ERRO);
+        assertThat(r.erros()).singleElement().satisfies(e -> {
+            assertThat(e.code()).isEqualTo("REG-024");
+            assertThat(e.pointer()).isEqualTo("#/locacao");
+        });
+    }
+
+    private static BaseCalculoNfseEntrada pedidoNfse(Map<String, Object> payload) {
+        return new BaseCalculoNfseEntrada("1", UUID.randomUUID(), "11222333000181", "nfse-1", "lote", null,
+                MAPPER.convertValue(payload, BaseCalculoUnificadaNfseInput.class));
     }
 
     private static BaseCalculoEntrada pedido(BaseCalculoUnificadaInput payload) {

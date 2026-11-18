@@ -3,6 +3,7 @@ package br.gov.serpro.rtc.worker;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 
 import br.gov.serpro.rtc.api.model.input.basecalculo.BaseCalculoUnificadaInput;
@@ -21,6 +22,7 @@ import br.gov.serpro.rtc.api.model.input.basecalculo.BaseCalculoUnificadaInput;
  * @param produzidoEm   instante em que a empresa produziu o pedido
  * @param payload       componentes e contexto do item (ano, tipo de documento, natureza)
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public record BaseCalculoEntrada(
         String schemaVersion,
         UUID correlationId,
@@ -28,9 +30,15 @@ public record BaseCalculoEntrada(
         String idCalculo,
         String loteId,
         @JsonDeserialize(using = DataHoraIsoDeserializer.class) OffsetDateTime produzidoEm,
-        BaseCalculoUnificadaInput payload) {
+        BaseCalculoUnificadaInput payload) implements PedidoBaseCalculo {
+
+    @Override
+    public TipoBaseCalculo tipo() {
+        return TipoBaseCalculo.UNIFICADA;
+    }
 
     /** Cópia com o CNPJ já validado do envelope AMQP. */
+    @Override
     public BaseCalculoEntrada comCnpj(String cnpjValidado) {
         return new BaseCalculoEntrada(schemaVersion, correlationId, cnpjValidado, idCalculo, loteId, produzidoEm, payload);
     }

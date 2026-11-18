@@ -105,7 +105,7 @@ class ResultadoPublisherTest {
     void baseDeCalculoVaiParaARoutingKeyDaBaseDaEmpresa() {
         aoEnviar(cd -> cd.getFuture().complete(new CorrelationData.Confirm(true, null)));
         final var base = new ResultadoBaseCalculo("1", UUID.randomUUID(), "12ABC34501DE35", "item-9", null,
-                ResultadoBaseCalculo.Status.ERRO, "1.6.1", null, 1, null, null);
+                TipoBaseCalculo.NFSE, ResultadoBaseCalculo.Status.ERRO, "1.6.1", null, 1, null, null, null);
 
         assertThatCode(() -> publisher.publicarBaseConfirmado(base)).doesNotThrowAnyException();
 
@@ -116,6 +116,7 @@ class ResultadoPublisherTest {
         assertThat(props.getMessageId()).isEqualTo(base.correlationId().toString());
         assertThat((String) props.getHeader("x-status")).isEqualTo("ERRO");
         assertThat((String) props.getHeader("x-id-calculo")).isEqualTo("item-9");
+        assertThat((String) props.getHeader("x-tipo")).isEqualTo("NFSE");
         assertThat((String) props.getHeader("x-cnpj")).isEqualTo("12ABC34501DE35");
         assertThat(props.getHeaders()).doesNotContainKey("x-id-nota");
         // campos nulos não vão para o JSON

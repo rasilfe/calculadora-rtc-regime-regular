@@ -202,12 +202,58 @@ propriedades da nota). O `payload` é o JSON do antigo endpoint, com os componen
 `baseSN` e `avisos` sobre campos ignorados) ou `ERRO` (e `erros` no mesmo formato dos erros
 de nota: campo obrigatório ausente, valor negativo, ou `REG-024` para `tipoDocumento`
 diferente de 55 e 65). Cabeçalhos: `message_id` e `correlation_id` = correlationId,
-`x-cnpj`, `x-status` e `x-id-calculo` (se informado).
+`x-cnpj`, `x-status`, `x-tipo` (`UNIFICADA` ou `NFSE`) e `x-id-calculo` (se informado).
 
 Diferenças em relação à nota: não há idempotência no Redis (o cálculo é puro e leva
 milissegundos; uma reentrega recalcula e publica de novo) e não há rejeição por
-`correlationId` repetido. Deduplique pelo `correlationId`. Mensagens ilegíveis ou com
-empresa inválida vão para `rtc.basecalculo.entrada.dlq`.
+`correlationId` repetido. Deduplique pelo `correlationId`. Mensagens ilegíveis, com
+`tipo` desconhecido ou com empresa inválida vão para `rtc.basecalculo.entrada.dlq`.
+
+### Base de cálculo da NFS-e
+
+Calcula a base do IBS/CBS e a base do Simples Nacional de uma NFS-e com o algoritmo
+oficial do antigo `POST /calculadora/base-calculo/base-calculo-unificada-nfse` (release
+1.6.1): documentos de ajuste por tipo, locação de imóveis (subitem 99.03) com
+copropriedade, MEI e optante pelo Simples Nacional.
+
+**Entrada:** mesma fila, routing key (`base.<CNPJ>`) e permissões da base unificada; o
+envelope leva `"tipo": "NFSE"` (sem `tipo`, vale `UNIFICADA`):
+
+```json
+{
+  "schemaVersion": "1",
+  "tipo": "NFSE",
+  "correlationId": "5f0c7d9e-2b1a-4c3d-8e9f-0a1b2c3d4e5f",
+  "idCalculo": "nfse-123",
+  "payload": {
+    "anoFatoGerador": 2026,
+    "opSimpNac": 1,
+    "situacao": "comum",
+    "vServ": 1000.00, "vDescIncond": 50.00,
+    "vISSQN": 30.00, "vPIS": 6.50, "vCOFINS": 30.00,
+    "documentos": [ { "tpAjusteBC": "101", "vAjusteAplic": 100.00 } ]
+  }
+}
+```
+
+| Campo | Valores |
+|---|---|
+| `opSimpNac` | 1 não optante, 2 MEI, 3 optante ME/EPP, 4 optante pendente |
+| `regApIBSCBSSN` | só para optantes (3 e 4): 1 IBS e CBS pelo SN, 2 CBS pelo SN e IBS regular, 3 ambos regulares |
+| `situacao` | `comum`, `salaoParceiro` ou `locacao9903` (exige o grupo `locacao`: `pCopropriedade`, `vTotOper`, `vDescIncondTot`, `somaAjustesLocImoveis`) |
+| `documentos[].tpAjusteBC` | 101 a 105 e 199 (deduzem do IBS/CBS; 199 exige `xTpAjusteBC`) e 9 (profissional parceiro, só Simples Nacional) |
+
+Regra (NT SE/CGNFS-e nº 009): `baseRG = vServ − vDescIncond − ajustes − vISSQN − vPIS −
+vCOFINS`, com PIS e COFINS só até 2026 e ISSQN até 2032. Na locação, a base é
+proporcional à copropriedade e o ISSQN não é deduzido.
+
+**Saída:** mesma fila `rtc.basecalculo.saida.<CNPJ>`, com `"tipo": "NFSE"` e as bases em
+`resultadoNfse` (`baseRG`, `baseSN`, `avisos` e `erros` no formato oficial, com `codigo` e
+`mensagem`). `baseSN` vem `null` para não optante e MEI; para MEI as duas bases vêm `null`.
+Como no endpoint original, erros de negócio (`E1534`, `BASE-NEGATIVA`, `EXXX-REGAP`,
+`EXXX-LOC-SN`, `LEIAUTE-XTP`) não impedem a apuração: o resultado traz `status` `ERRO`, os
+mesmos erros em `erros` e as bases calculadas em `resultadoNfse`. Campo obrigatório
+ausente, valor negativo ou locação sem o grupo `locacao` dão `ERRO` sem `resultadoNfse`.
 
 ## Garantias do worker
 
