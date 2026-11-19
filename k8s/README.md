@@ -399,14 +399,17 @@ mudam só os diretórios:
 
 Diferenças em relação ao vps:
 
-- **1 pod do worker** (KEDA de 1 a 1), com limite de 1,5 GiB (heap de cerca de 1 GiB);
-- **rollout sem pod extra** (`maxSurge: 0`): durante o deploy o worker fica fora por
-  alguns segundos e as notas esperam na fila;
+- **de 1 a 2 pods do worker** pelo KEDA (o segundo sobe com mais de 500 notas na fila),
+  cada um com 3 consumidores, 500m de CPU reservados e limite de 768 MiB
+  (`MaxRAMPercentage=60`, heap de até ~460 MB; o heap vivo medido é de ~70 MB);
+- **rollout sem parar o consumo** (`maxSurge: 1`, `maxUnavailable: 0`): o pod novo sobe
+  antes de o antigo sair;
 - RabbitMQ com limite de 1 GiB e disco de 5 GiB; PostgreSQL com limite de 768 MiB e
-  `max_connections=30`.
+  `max_connections=30` (2 workers + pod extra do rollout + migração cabem).
 
-Com 3 consumidores num pod só, a vazão é de cerca de um terço da do vps. Serve para
-homologação e volumes pequenos.
+O terceiro pod não cabe no orçamento de memória (limites somados de até 3,5 GiB) e, com
+4 vCPU divididas com RabbitMQ e PostgreSQL, quase não aumentaria a vazão: para crescer
+além disso, aumente a VM ou use o ambiente vps. Serve para homologação e volumes pequenos.
 
 No k3s, reserve memória para o sistema, para o kubelet despejar pods antes de o kernel
 matar processos (`/etc/rancher/k3s/config.yaml`):
