@@ -7,8 +7,8 @@
 #
 # Igual ao vps: RabbitMQ com 1 réplica sem anti-affinity, sem PDB do worker, 3
 # consumidores por pod. Em relação ao vps:
-#   - worker fixo em 1 pod (KEDA de 1 a 1), limite de 1,5 GiB;
-#   - rollout sem pod extra (maxSurge 0): durante o deploy as notas esperam na fila;
+#   - worker de 1 a 2 pods pelo KEDA, limite de 768 MiB por pod;
+#   - rollout com um pod extra (maxSurge 1, maxUnavailable 0): o deploy não para o consumo;
 #   - RabbitMQ com limite de 1 GiB e disco de 5 GiB.
 # O PostgreSQL enxuto fica em banco/. As empresas chegam pelo Traefik da vm-infra, que
 # termina o TLS e repassa para o Service rtc-rabbit-lan (rabbitmq-lan.yaml). O Prometheus da
