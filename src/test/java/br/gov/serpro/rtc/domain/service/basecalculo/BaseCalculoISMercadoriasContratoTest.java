@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 
 import br.gov.serpro.rtc.api.model.input.basecalculo.BaseCalculoISMercadoriasInput;
 import br.gov.serpro.rtc.api.model.output.basecalculo.BaseCalculoISMercadoriasModel;
@@ -34,7 +34,7 @@ import jakarta.validation.Valid;
  */
 class BaseCalculoISMercadoriasContratoTest {
 
-    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     private final MockMvc mockMvc = MockMvcBuilders.standaloneSetup(new ContratoOficial(new BaseCalculoService()))
             .build();

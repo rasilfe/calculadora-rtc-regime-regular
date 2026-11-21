@@ -4,7 +4,7 @@
 FROM eclipse-temurin:25-jdk AS build
 WORKDIR /src
 COPY .mvn .mvn
-COPY mvnw pom.xml ./
+COPY mvnw pom.xml lombok.config ./
 RUN chmod +x mvnw && ./mvnw -B -q dependency:go-offline
 COPY src src
 RUN ./mvnw -B -q package -DskipTests \
