@@ -8,13 +8,14 @@ import java.math.BigDecimal;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import tools.jackson.databind.annotation.JsonSerialize;
 
 import br.gov.serpro.rtc.api.model.SerializationVisibility;
 import br.gov.serpro.rtc.config.serializer.StringTCSTSerializer;
 import br.gov.serpro.rtc.config.serializer.StringTcClassTribSerializer;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
+import lombok.extern.jackson.Jacksonized;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -28,9 +29,10 @@ import lombok.Setter;
 @Getter
 @Setter
 @Builder
+@Jacksonized
 @JsonInclude(NON_NULL)
 @JsonPropertyOrder({ "CST", "cClassTrib", "indDoacao", "gIBSCBS", "gIBSCBSMono", "gTransfCred", "gAjusteCompet",
-        "gEstornoCred", "gCredPresOper", "gCredPresIBSZFM" })
+        "gEstornoCred", "gCredPresOper", "gCredPresIBSZFM", "memoriaCalculo" })
 public class IBSCBSDomain implements SerializationVisibility {
 
     @JsonSerialize(using = StringTCSTSerializer.class)
@@ -64,6 +66,9 @@ public class IBSCBSDomain implements SerializationVisibility {
     
     @Schema(description = "Informações do crédito presumido de IBS para fornecimentos a partir da ZFM")
     private CreditoPresumidoIBSZFMDomain gCredPresIBSZFM;
+
+    @Schema(description = "Memória de cálculo da CBS, do IBS estadual e do IBS municipal")
+    private MemoriaCalculoDomain memoriaCalculo;
 
     @JsonIgnore
     public boolean possuiBaseCalculoIBSCBS() {

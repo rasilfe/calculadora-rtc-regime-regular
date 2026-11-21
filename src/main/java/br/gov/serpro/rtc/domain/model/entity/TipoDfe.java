@@ -28,7 +28,7 @@ public class TipoDfe {
     @Column(name = "TPDF_ID")
     private Long id;
     
-    //@NotNull
+    @NotNull
     @Column(name = "TPDF_TIPO")
     private Integer tipo;
 
@@ -46,5 +46,13 @@ public class TipoDfe {
 
     @Column(name = "TPDF_FIM_VIGENCIA")
     private LocalDate fimVigencia;
+    
+    @NotNull
+    @Column(name = "TPDF_B_PERMITE_NCM_ZERO")
+	private boolean permiteNcmZero;
+
+    @NotNull
+    @Column(name = "TPDF_B_POSSUI_TRATAMENTO_CALCULADORA")
+	private boolean possuiTratamento;
 
 }

@@ -1,6 +1,6 @@
 -- =====================================================================
 -- GERADO AUTOMATICAMENTE por flyway/postgres/gerar_migracao_postgres.py
--- a partir do banco SQLite (versão da base: V0059). Não edite à mão:
+-- a partir do banco SQLite (versão da base: V0073). Não edite à mão:
 -- altere as migrações SQLite em flyway/sql e gere novamente.
 -- =====================================================================
 
@@ -299,6 +299,8 @@ ALTER TABLE CLASSIF_NBS_INDOP_LC ADD CONSTRAINT fk_classif_nbs_indop_lc_1 FOREIG
 ALTER TABLE CLASSIF_NBS_INDOP_LC ADD CONSTRAINT fk_classif_nbs_indop_lc_2 FOREIGN KEY (CNIL_NBS_CD) REFERENCES NBS (NBS_CD);
 
 ALTER TABLE CLASSIF_NBS_INDOP_LC ADD CONSTRAINT fk_classif_nbs_indop_lc_3 FOREIGN KEY (CNIL_LSLC_CD) REFERENCES LISTA_SERVICOS_LC_116 (LSLC_CD);
+
+ALTER TABLE ENQUADRAMENTO_REGIME_SIMPLES_NACIONAL ADD CONSTRAINT fk_enquadramento_regime_simples_nacional_0 FOREIGN KEY (ERSN_RASN_ID) REFERENCES REGIME_APURACAO_SIMPLES_NACIONAL (RASN_ID);
 
 ALTER TABLE EXCECAO_AD_REM_PRODUTO ADD CONSTRAINT fk_excecao_ad_rem_produto_0 FOREIGN KEY (EARP_AARP_ID) REFERENCES ALIQUOTA_AD_REM_PRODUTO (AARP_ID);
 

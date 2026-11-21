@@ -6,7 +6,7 @@
 
 ## Status
 
-> Aceito
+> Substituído pela [ADR011](./ADR011-adocao-spring-boot-4-java-25.md)
 
 ## Contexto
 

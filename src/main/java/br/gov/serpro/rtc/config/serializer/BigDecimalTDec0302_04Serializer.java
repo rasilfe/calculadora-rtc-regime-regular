@@ -1,10 +1,10 @@
 package br.gov.serpro.rtc.config.serializer;
 
-import br.gov.serpro.rtc.core.util.ArredondamentoUtils;
+import br.gov.serpro.rtc.shared.util.ArredondamentoUtils;
 
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.databind.JsonSerializer;
-import com.fasterxml.jackson.databind.SerializerProvider;
+import tools.jackson.core.JsonGenerator;
+import tools.jackson.databind.ValueSerializer;
+import tools.jackson.databind.SerializationContext;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -13,13 +13,13 @@ import java.math.BigDecimal;
  * Serializador para o tipo TDec_0302_04 (até 3 inteiros, de 2 a 4 decimais).
  * Exemplo válido: 0.01, 0.1234, 123.12, 999.9999
  *
- * Thread-safe: delega para {@link ArredondamentoUtils#formatarAliquota(BigDecimal)}.
- * DecimalFormat não é thread-safe, mas o método formatarAliquota é sincronizado, garantindo segurança em ambientes multi-thread.
+ * Thread-safe: delega para {@link ArredondamentoUtils#formatarAliquota(BigDecimal)}, que não guarda estado.
+ * A alíquota chega do cálculo já arredondada a 4 casas; o serializer apenas a formata, com 2 a 4 casas.
  */
-public class BigDecimalTDec0302_04Serializer extends JsonSerializer<BigDecimal> {
+public class BigDecimalTDec0302_04Serializer extends ValueSerializer<BigDecimal> {
 
     @Override
-    public void serialize(BigDecimal value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+    public void serialize(BigDecimal value, JsonGenerator gen, SerializationContext serializers) {
         if (value == null) {
             gen.writeNull();
         } else if (value.signum() < 0) {

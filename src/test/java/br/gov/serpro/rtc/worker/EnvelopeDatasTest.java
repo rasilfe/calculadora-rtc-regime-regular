@@ -15,8 +15,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
-import com.fasterxml.jackson.databind.JsonMappingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.DatabindException;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Datas do envelope com o ObjectMapper da aplicação (que tem um desserializador
@@ -48,7 +48,7 @@ class EnvelopeDatasTest {
     void produzidoEmInvalidoContinuaSendoRecusado() {
         final String json = "{\"correlationId\":\"" + UUID.randomUUID() + "\",\"produzidoEm\":\"17/11/2026\",\"payload\":{}}";
 
-        assertThatThrownBy(() -> objectMapper.readValue(json, NotaEntrada.class)).isInstanceOf(JsonMappingException.class);
+        assertThatThrownBy(() -> objectMapper.readValue(json, NotaEntrada.class)).isInstanceOf(DatabindException.class);
     }
 
     @Test

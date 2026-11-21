@@ -5,6 +5,146 @@ Todas as mudanças notáveis neste projeto serão documentadas neste arquivo.
 O formato é baseado em [Mantenha um Changelog](https://keepachangelog.com/pt-BR/1.1.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.7.2] - 2026-11-18
+
+### Corrigido
+
+- Arredondamento do cálculo (`POST calculadora/regime-geral` e
+  `POST calculadora/observabilidade/regime-geral`): a resposta passa a fechar consigo mesma. Antes,
+  as contas corriam com precisão interna de 8 casas e cada campo era arredondado sozinho na
+  serialização; um total podia diferir da soma dos itens exibidos (rejeição 1091, "Total de CBS
+  difere da soma dos itens") e o `vIBS` podia diferir de `vIBSUF + vIBSMun`. Agora cada número
+  publicado é arredondado uma vez, no cálculo, e é ele que entra na conta seguinte. **O que muda
+  para quem integra** (diferenças de centavos em relação à 1.7.0):
+  - **Somas**: o `vIBS` do item é a soma do `vIBSUF` e do `vIBSMun` exibidos. Ex.: base 12,00 com
+    IBS de 0,05% + 0,05%: `vIBSUF` 0.01, `vIBSMun` 0.01 e `vIBS` 0.02 (antes, 0.01).
+  - **Totais**: cada total é a soma do campo exibido nos itens, e o `vIBS` total é a soma dos
+    `vIBS` dos itens. Ex.: dois itens de 14,00 em 2026, `vCBS` 0.13 cada: total 0.26 (antes,
+    0.25); itens de 2.315,79 e 690,52, `vCBS` 20.84 e 6.21: total 27.05 (antes, 27.06).
+  - **Valores com alíquota efetiva**: a alíquota efetiva (`pAliqEfet` e a efetiva da tributação
+    regular) é arredondada a 4 casas e é ela que multiplica a base. Ex.: base 1.000.000,00, CBS de
+    8,8123% com redução de 60%: `pAliqEfet` 3.5249 e `vCBS` 35249.00 (antes, 35249.20, calculado
+    com 3,52492%). A diferença só aparece quando a alíquota efetiva exata tem mais de 4 casas.
+  - **Base**: a base (`vBC`) é arredondada a 2 casas antes de multiplicar; com Imposto Seletivo, é
+    o `vIS` exibido que compõe a base do IBS e da CBS.
+  - **Compra governamental**: o grupo principal traz a alíquota redistribuída com 4 casas e o
+    valor calculado com ela (`vBC × pAliqEfet ÷ 100`), que não é a soma dos valores do
+    `gTribCompraGov`; a diferença entre os dois grupos pode chegar a 0,04. Na transferência da CBS
+    ao Estado ou ao Município comprador, a alíquota de quem cede é arredondada e a de quem recebe
+    é obtida por diferença, e a soma das alíquotas exibidas é igual à soma das originais. Com
+    diferimento, o `vDif` do grupo principal é calculado com a alíquota redistribuída exibida.
+  - Não mudam: nomes de campos, tipos do JSON, empates (continuam indo para o par: base 25,00 a
+    0,9% dá `vCBS` 0.22) e valores cuja alíquota efetiva tem até 4 casas.
+- Diferimento parcial: o diferimento era descontado duas vezes do valor devido; passa a ser
+  descontado uma vez (`devido = valor − vDif`). Sem efeito nas classificações atuais, que só têm
+  diferimento de 100%.
+- Pedágio (`POST calculadora/pedagio`): o valor de cada trecho saía com as casas da conta interna
+  (ex.: 0.54545400) e a soma dos trechos não era o total. O total de cada tributo é a soma exata
+  das parcelas, arredondada uma vez; cada trecho recebe a parcela truncada no centavo e os
+  centavos restantes vão aos trechos de maior resto (empate: menor número de trecho). Ex.: base
+  200,00 em trechos de 10, 13 e 10 km: CBS 1.80 em 0.55, 0.71 e 0.54. A alíquota efetiva do trecho
+  é informativa, com 4 casas (ex.: 0.2727). Os campos continuam sendo números JSON.
+- Bases unificadas (`POST calculadora/base-calculo/base-calculo-unificada` e
+  `base-calculo-unificada-nfse`): as bases saem com 2 casas (ex.: 954.50, antes 954.50500000). Os
+  campos continuam sendo números JSON.
+- Dados abertos: percentual de redução lido do banco como `Float` é convertido pelo texto do
+  número, sem passar por `double` (0.365 sairia 0.36500000953674316).
+- Comparador de versões do perfil `offline` (`GET versao/status`): desde a 1.7.0 (migração para o
+  Spring Boot 4.1.2, com o Jackson 3), a rota respondia 500 ("Type definition error: [...]
+  VersaoOutput") em toda chamada, e a interface do pacote offline mostrava uma faixa de erro em
+  cada página. A consulta à instalação online funcionava; o que falhava era a leitura da resposta,
+  porque `VersaoOutput` não tem construtor que o Jackson 3 possa usar (o Jackson 2 usava o
+  construtor do builder). A classe passa a ser lida pelo builder (`@Jacksonized`), a rota responde
+  200 com a comparação e a subida registra a comparação no log, em vez do aviso de falha. Além
+  disso:
+  - **Sem acesso à instalação online** (conexão recusada, tempo esgotado, erro HTTP ou resposta
+    que não é o JSON esperado), a rota também respondia 500. Passa a responder 200 com
+    `versaoAplicacaoRemota`, `versaoDbRemota` e `dataDbRemota` ausentes e os três indicadores
+    `false`, com um aviso no log, como a `api-simples-nacional`: o modo offline não depende da
+    disponibilidade da instalação online. Na subida continuam as 3 tentativas, com um aviso ao
+    final.
+  - **Tempos limite**: a consulta não tinha tempo limite e podia prender a requisição numa rede
+    que não responde. Passa a esperar 5 s pela conexão e 10 s pela leitura
+    (`versao.connect-timeout` e `versao.read-timeout`, os mesmos nomes e valores da
+    `api-simples-nacional`).
+  - A leitura da resposta remota não era exercitada por nenhum teste; passa a ser, em
+    `Teste_VersaoOfflineService`, sem depender de rede.
+
+### Modificado
+
+- `ArredondamentoUtils` passa a ser a cópia única da política numérica da Calculadora, idêntica
+  byte a byte à da `api-simples-nacional`, no pacote `shared.util` (antes, `core.util`). Deixam de
+  existir `PRECISAO_INTERNA`, `arredondarInterno`, `dividirPorCem`, `multiplicarPorCem` e `CEM`.
+- Conta interna exata: soma, subtração, multiplicação e conversão entre percentual e fração não
+  arredondam; só a divisão que pode não terminar usa 34 dígitos significativos. O avaliador de
+  expressões não arredonda o resultado.
+- ADR003 reescrita com a nova política numérica.
+
+### Adicionado
+
+- Testes de proteção: `Teste_LoteArredondamento` (lote com semente fixa e invariantes conferidas
+  na resposta serializada), `Teste_CasosFixosArredondamento`,
+  `Teste_CasosFixosPedagioBasesArredondamento`, `Teste_SerializacaoNaoAlteraNumero`,
+  `Teste_ArquiteturaArredondamento` (nenhum arredondamento fora de `ArredondamentoUtils`) e
+  `Teste_ArredondamentoUtilsCopiaUnica` (SHA-256 da classe, igual nos dois projetos).
+
+## [1.7.1] - 2026-11-18
+
+### Segurança
+
+- Mitigada vulnerabilidade do OpenJDK com `-XX:-UseBASE64Intrinsics`, conforme [aviso de segurança de 17/11/2026](https://openjdk.org/groups/vulnerability/advisories/2026-11-17).
+
+## [1.7.0] - 2026-11-16
+
+### Adicionado
+
+- Grupo `memoriaCalculo` (`cbs`, `ibsUF`, `ibsMun`) em `tribCalc.IBSCBS`, presente também para CSTs sem `gIBSCBS` (ex.: imunidade 410)
+- Formatação pt-BR dos valores monetários e percentuais nas memórias de cálculo da CBS, do IBS e do Imposto Seletivo (ex.: `R$ 1.234,50`, `8,40%`)
+- Campos `suportado` e `permiteNcmZero` em cada tipo de `GET calculadora/dados-abertos/dfe/grupos` (colunas `TPDF_B_POSSUI_TRATAMENTO_CALCULADORA` e `TPDF_B_PERMITE_NCM_ZERO` de `TIPO_DFE`)
+
+### Modificado
+
+- Spring Boot atualizado de `3.5.16` para `4.1.2`, para tratar vulnerabilidades identificadas pelo Dependency Track
+- Java atualizado de `21` para `25` (`java.version` e `maven.compiler.release`), para tratar vulnerabilidades identificadas pelo Dependency Track
+- `spring-boot-starter-web` substituído por `spring-boot-starter-webmvc`
+- springdoc-openapi atualizado de `2.8.9` para `3.2.0`
+- jacoco atualizado de `0.8.12` para `0.8.14`
+- Lombok fixado em `1.18.48`, com `annotationProcessorPaths` no `maven-compiler-plugin`
+- Spring Retry fixado em `2.0.12`
+- Tracing: adicionado o starter `spring-boot-starter-opentelemetry`, e as versões de `micrometer-tracing-bridge-otel` e `opentelemetry-exporter-otlp` passam a ser gerenciadas pelo Spring Boot
+- Quando o grupo `impostoSeletivo` é informado, o CST, o cClassTrib e o vínculo entre eles passam a ser validados antes da consulta de alíquota, mesmo que não haja alíquota aplicável
+- Tipos de DFe NFe (tipo 55) e NFCe (tipo 65) passam a permitir NCM `00` e `00000000`  
+- Tipos de DFe NFe ABI (tipo 77), DERE (tipo 94), DIR (tipo 95) e DUIMP (tipo 96), quando informados nos endpoints de cálculo (`POST calculadora/regime-geral` e `POST calculadora/observabilidade/regime-geral`), retornam erro `TipoDfeNaoTratadoException`
+- Migração Flyway `V0067`: em `TIPO_DFE`, `TPDF_TIPO` passa a `NOT NULL` e são criadas as colunas `TPDF_B_PERMITE_NCM_ZERO` e `TPDF_B_POSSUI_TRATAMENTO_CALCULADORA`
+- Migração Flyway `V0068`: Migração para o Simples Nacional - "Correção dos anexos do Fator R da atividade 09 (cAtivSN 09) do catálogo ATIVIDADE_SIMPLES_NACIONAL."
+- Migração Flyway `V0069`: atualiza a tabela `MUNICIPIO` com as vigências segundo o site do IBGE, com as novas colunas `MUNI_INICIO_VIGENCIA` e `MUNI_FIM_VIGENCIA`
+- Migração Flyway `V0070`: atualiza descrições e vigências de NCM conforme o sistema Classif e inclui o NCM `85181020`
+- Migração Flyway `V0071`: Migração para o Simples Nacional - "Cálculo do Simples Nacional para todos os documentos fiscais (NF-e e NFS-e no mesmo contrato): vocabulário do regime, precisão da alíquota, máximo de itens e Imposto Seletivo por documento; regime de apuração identificado por código neutro; enquadramento dos campos de regime do documento; efeito do tpRBSN na NFS-e; indicadores de ISS no catálogo de atividades; e situações do ISS que escolhem o par de alíquotas com ou sem redistribuição do ISS."
+- Migração Flyway `V0072`: atualiza a tabela `NBS` conforme o arquivo nbs2-0.csv disponibilizado na base MDIC
+- Migração Flyway `V0073`: nova tabela de Classificações Tributárias (IT 2025.002 v.1.71), com nomes de `410003` e `410026`, inclusão em indDIR para `410003` e `410999`, e remoção da exceção do NCM `0710.80.00` na classificação `200014`
+
+### Removido
+
+- Campo `memoriaCalculo` de `gCBS`, `gIBSUF` e `gIBSMun` (substituído pelo grupo `tribCalc.IBSCBS.memoriaCalculo`)
+
+## [1.6.2] - 2026-10-28
+
+### Modificado
+
+- Script de migração `V0060`: na tabela `TIPO_DFE`, criadas colunas `TPDF_B_PERMITE_NCM_ZERO` e `TPDF_B_POSSUI_TRATAMENTO_CALCULADORA` e alterada coluna `TPDF_TIPO` de `NULL` para `NOT NULL`
+- Script de migração `V0061`: na tabela `ATIVIDADE_SIMPLES_NACIONAL`, corrigidos os anexos do Fator R da atividade 09 (cAtivSN 09) — `ATSN_ANEXO_SEM_FATOR_R` alterado de 'III' para 'V' e `ATSN_ANEXO_COM_FATOR_R` alterado de 'V' para 'III', conforme LC 123/2006, art. 18, §§ 5º-J e 5º-M
+- Migração Flyway `V0062`: atualiza a tabela de Classificações Tributárias conforme a IT 2025.002 v.1.70, com data de atualização de 01/10/2026; inclui nove cClassTrib e dependências, ajusta classificações existentes, fundamentações legais e vínculos com tipos de DF-e
+- Migração Flyway `V0063`: adiciona e carrega `CLTR_IND_GPBIODIFERENCA` e `CLTR_TPDOACAO` em `CLASSIFICACAO_TRIBUTARIA`, conforme a IT 2025.002 v.1.70, restrita às classificações do IBS/CBS
+- Migração Flyway `V0064`: inclui a classificação omitida para o serviço `20.02`, NBS `106062000` e cIndOp `100301` em `CLASSIF_NBS_INDOP_LC`
+- Migração Flyway `V0065`: ajusta as vigências em `CLASSIF_NBS_INDOP_LC` e `INDICADOR_OPERACAO_IBS_CBS`, passando o fim de 02/11/2026 para 30/11/2026 e o início de 03/11/2026 para 01/12/2026
+- Migração Flyway `V0066`: exclui a classificação indevida `CNIL_ID = 3087` de `CLASSIF_NBS_INDOP_LC`
+
+## [1.6.1] - 2026-10-22
+
+### Modificado
+
+- Atualização do ROADMAP.md
+
 ## [1.6.0] - 2026-10-13
 
 ### Modificado
@@ -19,7 +159,19 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 
 ### Modificado
 
-- Migração Flyway `V0058`: ajuste das vigências do cIndOp/classificações NBS relacionadas (`CLASSIF_NBS_INDOP_LC` e `INDICADOR_OPERACAO_IBS_CBS`), com fim em 02/11/2026 e início em 03/11/2026
+- Habilita a operação 820 para NFS-e, ajustando `TRTR_IN_POSSUI_AJUSTE` do registro `TRTR_ID=32` (migração Flyway `V0059`)
+
+## [1.5.3] - 2026-09-29
+
+### Modificado
+
+- Ajusta as vigências de `CLASSIF_NBS_INDOP_LC` e `INDICADOR_OPERACAO_IBS_CBS`: início em 01/10/2026 passa para 03/11/2026 e fim em 30/09/2026 passa para 02/11/2026 (migração Flyway `V0058`)
+
+## [1.5.2] - 2026-09-29
+
+### Adicionado
+
+- Ajuste para disponibilizar download do arquivo JAR do Simples Nacional no Portal
 
 ## [1.5.1] - 2026-09-10
 

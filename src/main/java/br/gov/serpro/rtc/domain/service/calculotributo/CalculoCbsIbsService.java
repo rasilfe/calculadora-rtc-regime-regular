@@ -3,13 +3,12 @@
  */
 package br.gov.serpro.rtc.domain.service.calculotributo;
 
-import static br.gov.serpro.rtc.core.util.ArredondamentoUtils.CEM;
-import static br.gov.serpro.rtc.core.util.ArredondamentoUtils.PRECISAO_INTERNA;
-
-import static br.gov.serpro.rtc.core.util.ArredondamentoUtils.arredondarInterno;
-import static br.gov.serpro.rtc.core.util.ArredondamentoUtils.dividir;
-import static br.gov.serpro.rtc.core.util.ArredondamentoUtils.dividirPorCem;
-import static br.gov.serpro.rtc.core.util.ArredondamentoUtils.multiplicar;
+import static br.gov.serpro.rtc.shared.util.ArredondamentoUtils.arredondarAliquotaPublicada;
+import static br.gov.serpro.rtc.shared.util.ArredondamentoUtils.arredondarValorFiscal;
+import static br.gov.serpro.rtc.shared.util.ArredondamentoUtils.dividir;
+import static br.gov.serpro.rtc.shared.util.ArredondamentoUtils.fracaoParaPercentual;
+import static br.gov.serpro.rtc.shared.util.ArredondamentoUtils.multiplicar;
+import static br.gov.serpro.rtc.shared.util.ArredondamentoUtils.percentualParaFracao;
 import static br.gov.serpro.rtc.domain.service.calculotributo.domain.VariavelExpressao.AJUSTE;
 import static br.gov.serpro.rtc.domain.service.calculotributo.domain.VariavelExpressao.ALIQUOTA;
 import static br.gov.serpro.rtc.domain.service.calculotributo.domain.VariavelExpressao.ALIQUOTA_AD_REM;
@@ -75,10 +74,24 @@ import lombok.RequiredArgsConstructor;
 /**
  * Serviço responsável por calcular CBS e IBS a partir do tratamento tributário,
  * das alíquotas aplicáveis e das variáveis da operação.
+ * <p>
+ * Política numérica (ADR003): a conta é exata, e cada número publicado é arredondado uma vez,
+ * aqui, na casa do leiaute. O número publicado é o que entra na conta seguinte:
+ * <ul>
+ *   <li>a base ({@code vBC}) é arredondada a 2 casas antes de multiplicar;</li>
+ *   <li>a alíquota e a alíquota efetiva são arredondadas a 4 casas (em pontos percentuais) e é a
+ *       efetiva publicada que multiplica a base: {@code valor = arred2(vBC × alíquota publicada ÷
+ *       100)};</li>
+ *   <li>com diferimento, {@code vDif = arred2(vBC × alíquota publicada ÷ 100 × pDif ÷ 100)} e o
+ *       valor devido é {@code arred2(vBC × alíquota publicada ÷ 100) − vDif}.</li>
+ * </ul>
+ * Na monofasia (ainda não liberada), a base é uma quantidade e as alíquotas são ad rem: os
+ * valores saem com 2 casas e as alíquotas com 4, sem outra mudança na conta.
  */
 @RequiredArgsConstructor
 @Service
 public class CalculoCbsIbsService {
+    private static final BigDecimal CEM_POR_CENTO = new BigDecimal("100");
     private static final BigDecimal PBIO = new BigDecimal("30");
     private static final BigDecimal PDIF = new BigDecimal("100");
     private static final BigDecimal VARIACAO_EAC = new BigDecimal("5");
@@ -190,7 +203,7 @@ public class CalculoCbsIbsService {
         if (possuiPercentualReducao) {
             BigDecimal percentualReducao = percentualReducaoService
                     .buscar(classificacaoTributaria.id(), idTributo, data);
-            valorPercentualReducao = dividirPorCem(percentualReducao);
+            valorPercentualReducao = percentualParaFracao(percentualReducao);
         }
 
         // ajuste para 510001 => seria interessante que o tipo de alíquota fosse o padrão na planilha...
@@ -208,7 +221,7 @@ public class CalculoCbsIbsService {
         switch (tipoAliquota) {
             case "Padrão":
                 if (aliquotaInformada != null) {
-                    valorAliquota = dividirPorCem(aliquotaInformada);
+                    valorAliquota = percentualParaFracao(aliquotaInformada);
                     aliquotaInformadaAplicada = true;
                 } else {
                     valorAliquota = buscarAliquotaPadrao(idTributo, codigoUf, codigoMunicipio, data);
@@ -218,7 +231,7 @@ public class CalculoCbsIbsService {
 
             case "Uniforme nacional (referência)":
                 if (aliquotaInformada != null) {
-                    valorAliquota = dividirPorCem(aliquotaInformada);
+                    valorAliquota = percentualParaFracao(aliquotaInformada);
                     aliquotaInformadaAplicada = true;
                 } else {
                     valorAliquota = buscarAliquotaReferencia(idTributo, data);
@@ -234,13 +247,13 @@ public class CalculoCbsIbsService {
                     // valorAliquotaAdRem = valorAliquota;
                     valorAliquotaAdRemPrincipal = ALIQUOTA_GASOLINA_TIPO_A;
                     valorAliquotaAdRemSecundaria = ALIQUOTA_EAC;
-                    pBio = dividirPorCem(PBIO);
-                    pDif = dividirPorCem(PDIF);
+                    pBio = percentualParaFracao(PBIO);
+                    pDif = percentualParaFracao(PDIF);
                     variacaoPontoPercentual = VARIACAO_EAC;
 
                 } else {
                     if (aliquotaInformada != null) {
-                        valorAliquota = dividirPorCem(aliquotaInformada);
+                        valorAliquota = percentualParaFracao(aliquotaInformada);
                         aliquotaInformadaAplicada = true;
                     } else {
                         valorAliquota = buscarAliquotaUniformeSetorial(item.getNbs(), idTributo,
@@ -252,7 +265,7 @@ public class CalculoCbsIbsService {
 
             case "Fixa":
                 if (aliquotaInformada != null) {
-                    valorAliquota = dividirPorCem(aliquotaInformada);
+                    valorAliquota = percentualParaFracao(aliquotaInformada);
                     aliquotaInformadaAplicada = true;
                 } else {
                     valorAliquota = buscarAliquotaFixa(idTributo, classificacaoTributaria.id(), data);
@@ -262,7 +275,7 @@ public class CalculoCbsIbsService {
 
             case "Sem alíquota":
                 if (aliquotaInformada != null) {
-                    valorAliquota = dividirPorCem(aliquotaInformada);
+                    valorAliquota = percentualParaFracao(aliquotaInformada);
                     aliquotaInformadaAplicada = true;
                     aliquotaDivididaPorCem = true;
                 } else {
@@ -300,7 +313,12 @@ public class CalculoCbsIbsService {
                     entry(PERCENTUAL_BIOCOMBUSTIVEL, pBio),
                     entry(PERCENTUAL_DIFERIMENTO, pDif));
 
-            resultadoAliquota = avaliador.evaluate(expressaoAliquota, variaveis0, PRECISAO_INTERNA);
+            resultadoAliquota = avaliador.evaluate(expressaoAliquota, variaveis0);
+        }
+
+        if (aliquotaDivididaPorCem) {
+            // a alíquota vai ao documento com até 4 casas e é ela que segue na conta
+            resultadoAliquota = publicarAliquota(resultadoAliquota);
         }
 
         if (isNotBlank(expressaoAliquotaEfetiva)) {
@@ -322,7 +340,11 @@ public class CalculoCbsIbsService {
                     entry(PERCENTUAL_DIFERIMENTO, pDif));
 
             resultadoAliquotaEfetiva = avaliador.evaluate(expressaoAliquotaEfetiva,
-                    variaveis1, PRECISAO_INTERNA);
+                    variaveis1);
+            if (aliquotaDivididaPorCem) {
+                // alíquota efetiva: arredondada uma vez a 4 casas; é ela que multiplica a base
+                resultadoAliquotaEfetiva = publicarAliquota(resultadoAliquotaEfetiva);
+            }
         }
 
         var variaveis2 = ofEntries(
@@ -345,7 +367,11 @@ public class CalculoCbsIbsService {
                 entry(PERCENTUAL_BIOCOMBUSTIVEL, pBio),
                 entry(PERCENTUAL_DIFERIMENTO, pDif));
 
-        resultadoBaseCalculo = avaliador.evaluate(expressaoBaseCalculo, variaveis2, PRECISAO_INTERNA);
+        resultadoBaseCalculo = avaliador.evaluate(expressaoBaseCalculo, variaveis2);
+        if (!tratamentoTributario.isInPossuiMonofasia()) {
+            // a base é arredondada a 2 casas antes de multiplicar (na monofasia é uma quantidade)
+            resultadoBaseCalculo = arredondarValorFiscal(resultadoBaseCalculo);
+        }
 
         if (resultadoBaseCalculo.compareTo(ZERO) < 0) {
             resultadoBaseCalculo = ZERO;
@@ -374,7 +400,9 @@ public class CalculoCbsIbsService {
                 entry(PERCENTUAL_BIOCOMBUSTIVEL, pBio),
                 entry(PERCENTUAL_DIFERIMENTO, pDif));
 
-        resultadoTributoCalculado = avaliador.evaluate(expressaoTributoCalculado, variaveis3, PRECISAO_INTERNA);
+        // conta exata sobre os números publicados (base e alíquota efetiva), arredondada uma vez
+        final BigDecimal tributoCalculadoExato = avaliador.evaluate(expressaoTributoCalculado, variaveis3);
+        resultadoTributoCalculado = arredondarValorFiscal(tributoCalculadoExato);
 
         if (isNotBlank(expressaoTributoDevido)) {
             var variaveis4 = ofEntries(
@@ -399,7 +427,7 @@ public class CalculoCbsIbsService {
                     entry(PERCENTUAL_BIOCOMBUSTIVEL, pBio),
                     entry(PERCENTUAL_DIFERIMENTO, pDif));
 
-            resultadoTributoDevido = avaliador.evaluate(expressaoTributoDevido, variaveis4, PRECISAO_INTERNA);
+            resultadoTributoDevido = arredondarValorFiscal(avaliador.evaluate(expressaoTributoDevido, variaveis4));
         }
 
         if (isNoneBlank(expressaoPercentualDiferimento, expressaoValorDiferimento)) {
@@ -420,11 +448,15 @@ public class CalculoCbsIbsService {
                     entry(AJUSTE, valorAjuste),
                     entry(REDUTOR, valorRedutor));
 
-            resultadoPercentualDiferimento = avaliador.evaluate(expressaoPercentualDiferimento, variaveis5, PRECISAO_INTERNA);
+            // pDif publicado com até 4 casas (em pontos percentuais)
+            resultadoPercentualDiferimento = publicarAliquota(
+                    avaliador.evaluate(expressaoPercentualDiferimento, variaveis5));
 
+            // vDif = arred2(vBC × alíquota publicada ÷ 100 × pDif ÷ 100): a expressão recebe o
+            // tributo calculado exato, e o produto é arredondado uma única vez
             var variaveis6 = ofEntries(
                     entry(PERCENTUAL_DIFERIMENTO, resultadoPercentualDiferimento),
-                    entry(TRIBUTO_CALCULADO, resultadoTributoCalculado),
+                    entry(TRIBUTO_CALCULADO, tributoCalculadoExato),
                     entry(QUANTIDADE, quantidade),
                     entry(BASE_CALCULO, resultadoBaseCalculo),
                     entry(ALIQUOTA, resultadoAliquota),
@@ -440,14 +472,11 @@ public class CalculoCbsIbsService {
                     entry(AJUSTE, valorAjuste),
                     entry(REDUTOR, valorRedutor));
 
-            resultadoValorDiferimento = avaliador.evaluate(expressaoValorDiferimento, variaveis6, PRECISAO_INTERNA);
+            resultadoValorDiferimento = arredondarValorFiscal(
+                    avaliador.evaluate(expressaoValorDiferimento, variaveis6));
 
-            resultadoTributoCalculado = arredondarInterno(resultadoTributoCalculado.subtract(resultadoValorDiferimento));
-            resultadoTributoDevido = arredondarInterno(resultadoTributoCalculado.subtract(resultadoValorDiferimento));
-
-            if (resultadoTributoCalculado.compareTo(ZERO) < 0) {
-                resultadoTributoCalculado = ZERO;
-            }
+            // valor devido: o tributo calculado menos o diferimento, descontado uma única vez
+            resultadoTributoDevido = resultadoTributoCalculado.subtract(resultadoValorDiferimento);
 
             if (resultadoTributoDevido.compareTo(ZERO) < 0) {
                 resultadoTributoDevido = ZERO;
@@ -524,13 +553,13 @@ public class CalculoCbsIbsService {
     }
 
     private BigDecimal buscarAliquotaReferencia(Long idTributo, LocalDate data) {
-        return dividirPorCem(
+        return percentualParaFracao(
                 aliquotaReferenciaService.buscar(idTributo, data));
     }
 
     protected BigDecimal buscarAliquotaPadrao(Long idTributo, Long codigoUf, Long codigoMunicipio, LocalDate data) {
         final var aliquota = aliquotaPadraoService.buscarAliquota(idTributo, codigoUf, codigoMunicipio, data);
-        return dividirPorCem(aliquota.valorAplicavel());
+        return percentualParaFracao(aliquota.valorAplicavel());
     }
 
     private BigDecimal buscarAliquotaUniformeSetorial(String nbs, Long idTributo, Long idClassificacaoTributaria, LocalDate data) {
@@ -541,7 +570,7 @@ public class CalculoCbsIbsService {
                 throw new ErroGenericoValidacaoException("Alíquota uniforme setorial não encontrada em " + data);
             }
         }
-        return dividirPorCem(aliquotaUniformeSetorial);
+        return percentualParaFracao(aliquotaUniformeSetorial);
     }
 
     private BigDecimal buscarAliquotaFixa(Long idTributo, Long idClassificacaoTributaria, LocalDate data) {
@@ -550,7 +579,7 @@ public class CalculoCbsIbsService {
         if (aliquotaFixa == null) {
             throw new ErroGenericoValidacaoException("Alíquota fixa não encontrada em " + data);
         }
-        return dividirPorCem(aliquotaFixa);
+        return percentualParaFracao(aliquotaFixa);
     }
 
     private BigDecimal obterAliquotaNominal(TributoEnum tributo, ItemOperacaoInput item) {
@@ -595,7 +624,11 @@ public class CalculoCbsIbsService {
             BigDecimal redutor = BigDecimal.ONE.subtract(percentualReducao);
             aliquotaEfetiva = multiplicar(aliquota, redutor);
         }
-        BigDecimal tributoDevido = multiplicar(baseCalculo, aliquotaEfetiva);
+        if (aliquotaDivididaPorCem) {
+            // alíquota efetiva da tributação regular: 4 casas, e é ela que multiplica a base
+            aliquotaEfetiva = publicarAliquota(aliquotaEfetiva);
+        }
+        BigDecimal tributoDevido = arredondarValorFiscal(multiplicar(baseCalculo, aliquotaEfetiva));
         return TributacaoRegularOutput
             .builder()
             .cst(cst)
@@ -627,8 +660,8 @@ public class CalculoCbsIbsService {
         if (classificacaoTributaria.inGrupoMonofasiaPadrao()) {
             grupoGMonoPadrao = GrupoEtapaMonofasiaOutput
                 .builder()
-                .quantidade(!classificacaoTributaria.inGrupoMonofasiaRet() ? quantidade : dividir(quantidade.multiply(variacaoPontoPercentual), CEM))
-                .aliquotaAdRem(!classificacaoTributaria.inGrupoMonofasiaRet() ? aliquotaAdRemPrincipal : aliquotaAdRemSecundaria)
+                .quantidade(!classificacaoTributaria.inGrupoMonofasiaRet() ? quantidade : percentualParaFracao(quantidade.multiply(variacaoPontoPercentual)))
+                .aliquotaAdRem(arredondarAliquotaPublicada(!classificacaoTributaria.inGrupoMonofasiaRet() ? aliquotaAdRemPrincipal : aliquotaAdRemSecundaria))
                 .valor(tributoCalculado)
                 .build();
         }
@@ -636,7 +669,7 @@ public class CalculoCbsIbsService {
             grupoGMonoReten = GrupoEtapaMonofasiaOutput
                 .builder()
                 .quantidade(multiplicar(quantidade, obterFatorBioCombustivel()))
-                .aliquotaAdRem(aliquotaAdRemSecundaria)
+                .aliquotaAdRem(arredondarAliquotaPublicada(aliquotaAdRemSecundaria))
                 .valor(tributoDevido)
                 .build();
         }
@@ -644,14 +677,15 @@ public class CalculoCbsIbsService {
             grupoGMonoRet = GrupoEtapaMonofasiaOutput
                 .builder()
                 .quantidade(quantidade)
-                .aliquotaAdRem(aliquotaAdRemPrincipal)
+                .aliquotaAdRem(arredondarAliquotaPublicada(aliquotaAdRemPrincipal))
                 .valor(tributoDevido)
                 .build();
         }
         if (classificacaoTributaria.inGrupoMonofasiaDiferimento()) {
             grupoGMonoDiferimento = GrupoDiferimentoMonofasiaOutput
                 .builder()
-                .percentualDiferimento(dividir(tributoCalculado.subtract(tributoDevido), tributoCalculado).movePointRight(2))
+                .percentualDiferimento(arredondarAliquotaPublicada(fracaoParaPercentual(
+                        dividir(tributoCalculado.subtract(tributoDevido), tributoCalculado))))
                 .valorDiferimento(tributoCalculado.subtract(tributoDevido))
                 .build();
         }
@@ -664,6 +698,14 @@ public class CalculoCbsIbsService {
             .build();
     }
     
+    /**
+     * Alíquota publicada: a fração recebida é levada a pontos percentuais, arredondada uma vez a
+     * 4 casas e devolvida como fração, para seguir na conta. Nulo permanece nulo.
+     */
+    private static BigDecimal publicarAliquota(BigDecimal fracao) {
+        return percentualParaFracao(arredondarAliquotaPublicada(fracaoParaPercentual(fracao)));
+    }
+
     private static Entry<String, BigDecimal> entry(VariavelExpressao c, BigDecimal v) {
         return Map.entry(c.getNome(), requireNonNullElse(v, ZERO));
     }
@@ -680,7 +722,7 @@ public class CalculoCbsIbsService {
     }
 
     private static BigDecimal obterFatorBioCombustivel() {
-        return dividir(PBIO, CEM.subtract(PBIO));
+        return dividir(PBIO, CEM_POR_CENTO.subtract(PBIO));
     }
 
 }

@@ -20,7 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 
 import br.gov.serpro.rtc.api.model.input.basecalculo.enumeration.SituacaoOperacaoNfse;
@@ -48,7 +48,7 @@ class CalculoBaseListenerTest {
         publisher = mock(ResultadoPublisher.class);
         canal = mock(Channel.class);
         registry = new SimpleMeterRegistry();
-        listener = new CalculoBaseListener(calculo, publisher, new ObjectMapper().findAndRegisterModules(),
+        listener = new CalculoBaseListener(calculo, publisher, new ObjectMapper(),
                 new WorkerProperties(), registry);
     }
 

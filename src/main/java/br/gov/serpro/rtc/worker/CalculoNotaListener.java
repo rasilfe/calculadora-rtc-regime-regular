@@ -11,7 +11,8 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 
 import br.gov.serpro.rtc.api.model.roc.ObservabilidadeItemDomain;
@@ -149,7 +150,7 @@ public class CalculoNotaListener {
                 return null;
             }
             return nota;
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             log.error("Mensagem ilegível (messageId={}); enviando para a DLQ: {}",
                     mensagem.getMessageProperties().getMessageId(), e.getMessage());
             return null;

@@ -8,14 +8,19 @@ import java.util.UUID;
 import org.springframework.stereotype.Component;
 import org.springframework.test.util.JsonPathExpectationsHelper;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.jayway.jsonpath.Configuration;
 
 import br.gov.serpro.rtc.api.exceptionhandler.dto.ErroDetalhe;
 import br.gov.serpro.rtc.api.model.input.OperacaoInput;
 import br.gov.serpro.rtc.api.model.roc.ObservabilidadeItemDomain;
 import br.gov.serpro.rtc.domain.service.CalculadoraService;
+import br.gov.serpro.rtc.domain.service.ObservabilidadeService;
+import br.gov.serpro.rtc.domain.service.collector.ErrosCalculoException;
+import br.gov.serpro.rtc.domain.service.exception.CampoInvalidoException;
+import br.gov.serpro.rtc.domain.service.exception.EntidadeNaoEncontradaException;
+import br.gov.serpro.rtc.domain.service.exception.ValidacaoException;
 import br.gov.serpro.rtc.worker.CalculoNotaService;
 import br.gov.serpro.rtc.worker.NotaEntrada;
 import br.gov.serpro.rtc.worker.ResultadoNota;
@@ -43,9 +48,57 @@ public class CalculoTestSupport {
     private final Validator validator;
     private final CalculadoraService calculadoraService;
     private final CalculoNotaService calculoNotaService;
+    private final ObservabilidadeService observabilidadeService;
+
+    /** Status HTTP e corpo que o antigo endpoint devolveria. */
+    public record RespostaApi(int status, String corpo) {
+    }
+
+    /**
+     * Emula o antigo {@code POST /calculadora/regime-geral}, inclusive o status HTTP que o
+     * {@code ApiExceptionHandler} da release oficial dava a cada exceção. Serve para manter
+     * os testes da Receita que verificam o status sem trazer a API de volta.
+     */
+    public RespostaApi postRegimeGeral(String jsonOperacao) {
+        try {
+            return new RespostaApi(200, regimeGeral(jsonOperacao));
+        } catch (RuntimeException e) {
+            return new RespostaApi(statusDaApi(e), e.getMessage());
+        }
+    }
+
+    /**
+     * Emula o antigo {@code POST /calculadora/observabilidade/regime-geral}: erros por item
+     * voltam com 200 no ROC; erros da operação ({@link ErrosCalculoException}) davam 422.
+     */
+    public RespostaApi postObservabilidade(String jsonOperacao) {
+        try {
+            final OperacaoInput operacao = objectMapper.readValue(jsonOperacao, OperacaoInput.class);
+            return new RespostaApi(200,
+                    objectMapper.writeValueAsString(observabilidadeService.processarOperacao(operacao, "http://localhost:8080")));
+        } catch (ErrosCalculoException e) {
+            return new RespostaApi(422, e.getMessage());
+        } catch (RuntimeException e) {
+            return new RespostaApi(statusDaApi(e), e.getMessage());
+        }
+    }
+
+    private static int statusDaApi(RuntimeException e) {
+        if (e instanceof EntidadeNaoEncontradaException) {
+            return 404;
+        }
+        if (e instanceof ValidacaoException) {
+            return 422;
+        }
+        if (e instanceof CampoInvalidoException || e instanceof ConstraintViolationException
+                || e instanceof JacksonException) {
+            return 400;
+        }
+        return 500;
+    }
 
     /** Calcula pelo serviço de regime geral e devolve o ROC serializado em JSON. */
-    public String regimeGeral(String jsonOperacao) throws JsonProcessingException {
+    public String regimeGeral(String jsonOperacao) throws JacksonException {
         final OperacaoInput operacao = objectMapper.readValue(jsonOperacao, OperacaoInput.class);
         final var violacoes = validator.validate(operacao);
         if (!violacoes.isEmpty()) {
@@ -55,14 +108,14 @@ public class CalculoTestSupport {
     }
 
     /** Calcula a nota pelo caminho do worker. */
-    public ResultadoNota calcularNota(String jsonOperacao) throws JsonProcessingException {
+    public ResultadoNota calcularNota(String jsonOperacao) throws JacksonException {
         final OperacaoInput operacao = objectMapper.readValue(jsonOperacao, OperacaoInput.class);
         return calculoNotaService.calcular(
                 new NotaEntrada("1", UUID.randomUUID(), "11222333000181", "nota-teste", "lote-teste", OffsetDateTime.now(), operacao));
     }
 
     /** Calcula a nota pelo caminho do worker e devolve o envelope serializado em JSON. */
-    public String calcularNotaJson(String jsonOperacao) throws JsonProcessingException {
+    public String calcularNotaJson(String jsonOperacao) throws JacksonException {
         return objectMapper.writeValueAsString(calcularNota(jsonOperacao));
     }
 
@@ -71,17 +124,17 @@ public class CalculoTestSupport {
      * serializado, que tem o mesmo formato da resposta do antigo endpoint de
      * observabilidade.
      */
-    public String calcularNotaResultadoJson(String jsonOperacao) throws JsonProcessingException {
+    public String calcularNotaResultadoJson(String jsonOperacao) throws JacksonException {
         return objectMapper.writeValueAsString(calcularNota(jsonOperacao).resultado());
     }
 
     /** Títulos de todos os erros do resultado: os da nota e os de cada item. */
-    public List<String> titulosErro(String jsonOperacao) throws JsonProcessingException {
+    public List<String> titulosErro(String jsonOperacao) throws JacksonException {
         return erros(calcularNota(jsonOperacao)).stream().map(ErroDetalhe::title).toList();
     }
 
     /** Códigos de todos os erros do resultado: os da nota e os de cada item. */
-    public List<String> codigosErro(String jsonOperacao) throws JsonProcessingException {
+    public List<String> codigosErro(String jsonOperacao) throws JacksonException {
         return erros(calcularNota(jsonOperacao)).stream().map(ErroDetalhe::code).toList();
     }
 

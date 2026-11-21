@@ -10,7 +10,7 @@
 
 ## Contexto
 
-A API RTC Calculadora processa requisições concorrentes em Java 21 e gera documentos XML para
+A API RTC Calculadora processa requisições concorrentes em Java 25 e gera documentos XML para
 diferentes modelos fiscais (NFe, NFCe, CTe, BPe, NF3e). A serialização XML usa Jakarta XML
 Binding.
 
@@ -32,7 +32,7 @@ correspondente e cria seu próprio `Marshaller` dentro do método de serializaç
 Positivas:
 - Thread-safe: cada operação usa seu próprio `Marshaller`
 - Evita falhas causadas por compartilhamento de estado mutável entre threads
-- Compatível com virtual threads do Java 21 (não depende de estado por thread)
+- Compatível com virtual threads do Java 21 ou superior (não depende de estado por thread)
 - `JAXBContext` é reutilizado sem compartilhar objetos não thread-safe
 
 Negativas:

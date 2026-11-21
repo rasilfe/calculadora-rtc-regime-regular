@@ -8,7 +8,7 @@ import java.math.BigDecimal;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import tools.jackson.databind.annotation.JsonSerialize;
 
 import br.gov.serpro.rtc.api.model.SerializationVisibility;
 import br.gov.serpro.rtc.config.serializer.BigDecimalTDec0302_04Serializer;
@@ -24,7 +24,7 @@ import lombok.Setter;
 @Getter
 @Setter
 @JsonInclude(NON_NULL)
-@JsonPropertyOrder({ "pIBSMun", "gDif", "gDevTrib", "gRed", "vIBSMun", "memoriaCalculo" })
+@JsonPropertyOrder({ "pIBSMun", "gDif", "gDevTrib", "gRed", "vIBSMun" })
 public class IBSMunDomain implements SerializationVisibility {
 
     @JsonSerialize(using = BigDecimalTDec0302_04Serializer.class)
@@ -43,9 +43,6 @@ public class IBSMunDomain implements SerializationVisibility {
     @JsonSerialize(using = BigDecimalTDec1302Serializer.class)
     @Schema(description = "Valor do IBS de competência do Município")
     private BigDecimal vIBSMun = ZERO;
-    
-    @Schema(description = "Memória de Cálculo")
-    private String memoriaCalculo;
     
     @JsonIgnore
     public BigDecimal getVDif() {

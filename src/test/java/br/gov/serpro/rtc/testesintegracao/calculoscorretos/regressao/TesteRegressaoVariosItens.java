@@ -22,21 +22,19 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.Resource;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import br.gov.serpro.rtc.api.model.input.OperacaoInput;
 import br.gov.serpro.rtc.domain.service.CalculadoraService;
 
 @SpringBootTest
-@AutoConfigureMockMvc
 @TestPropertySource(locations = "classpath:application-testes.yml")
 @ActiveProfiles("testes")
 @Tag("regressao")
@@ -163,8 +161,8 @@ class TesteRegressaoVariosItens {
 
         if (esperado.isObject()) {
             final Set<String> todosCampos = new HashSet<>();
-            esperado.fieldNames().forEachRemaining(todosCampos::add);
-            obtido.fieldNames().forEachRemaining(todosCampos::add);
+            todosCampos.addAll(esperado.propertyNames());
+            todosCampos.addAll(obtido.propertyNames());
 
             for (final String campo : todosCampos) {
                 diferencas.addAll(

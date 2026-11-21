@@ -11,6 +11,8 @@ import java.time.LocalDate;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
@@ -93,6 +95,34 @@ class Teste_tpdoc_9_RegressaoAnexoVigenciaExcecao {
         assertThatCode(() -> ncmAplicavelService.criticarNcmContraAnexo("02071100",
                 classificacao.id(), classificacao.codigo(), DATA_2026, "CBS e IBS"))
                 .doesNotThrowAnyException();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = { "2026-01-01", "2026-06-01" })
+    @DisplayName("Anexo XV (200014): 0710.80.00 é aceito (exclusão alcança só cogumelos e trufas), inclusive em 01/01/2026")
+    void teste_anexoXv_07108000Aceito(final String data) {
+        final LocalDate dataVigencia = LocalDate.parse(data);
+        ClassificacaoTributariaDTO classificacao = classificacaoTributariaService
+                .buscarClassificacaoTributariaCbsIbs("200014", dataVigencia);
+
+        assertThat(ncmAplicavelRepository.temExcecaoNcmAplicavel("07108000", classificacao.id(), dataVigencia))
+                .isFalse();
+        assertThatCode(() -> ncmAplicavelService.criticarNcmContraAnexo("07108000",
+                classificacao.id(), classificacao.codigo(), dataVigencia, "CBS e IBS"))
+                .doesNotThrowAnyException();
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = { "2026-01-01", "2026-06-01" })
+    @DisplayName("Anexo XV (200014): cogumelos e trufas da subposição 0709.5 continuam excepcionados")
+    void teste_anexoXv_07095Rejeitado(final String data) {
+        final LocalDate dataVigencia = LocalDate.parse(data);
+        ClassificacaoTributariaDTO classificacao = classificacaoTributariaService
+                .buscarClassificacaoTributariaCbsIbs("200014", dataVigencia);
+
+        assertThatThrownBy(() -> ncmAplicavelService.criticarNcmContraAnexo("07095100",
+                classificacao.id(), classificacao.codigo(), dataVigencia, "CBS e IBS"))
+                .isExactlyInstanceOf(NcmNaoVinculadaException.class);
     }
 
     @Test

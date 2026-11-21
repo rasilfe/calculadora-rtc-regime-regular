@@ -102,7 +102,7 @@ public enum ElementoBaseCalculo {
      * Verifica se este campo está ativo (exigido) para um contexto específico.
      * 
      * @param ano o ano do fato gerador (2026-2033)
-     * @param natureza a natureza da operação ("bem" ou "servico")
+     * @param naturezaParam a natureza da operação ("bem" ou "servico")
      * @param tipoDocumento o tipo de documento (55 ou 65)
      * @return true se o campo está ativo/exigido, false caso contrário
      */

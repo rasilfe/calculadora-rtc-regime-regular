@@ -42,7 +42,6 @@ public enum SiglasDFeEnum {
     private static final Set<String> NCM_APLICAVEL = Set.of("NFSE", "NFE", "NFCE");
     private static final Set<String> NBS_APLICAVEL = Set.of("NFSE");
     private static final Set<String> IMPOSTO_SELETIVO_APLICAVEL = Set.of("NFE", "NFCE");
-    private static final Set<SiglasDFeEnum> SEM_TRATAMENTO_CALCULADORA = Set.of(NFEABI, DERE);
 
     public static String normalizarSigla(String sigla) {
         if (sigla == null) return "";
@@ -66,14 +65,6 @@ public enum SiglasDFeEnum {
      */
     public boolean corresponde(String sigla) {
         return name().equals(normalizarSigla(sigla));
-    }
-
-    /**
-     * Indica se este tipo de documento ainda não possui tratamento nos
-     * endpoints de cálculo.
-     */
-    public boolean semTratamentoCalculadora() {
-        return SEM_TRATAMENTO_CALCULADORA.contains(this);
     }
 
     public static boolean contemSiglaNormalizada(String sigla) {
