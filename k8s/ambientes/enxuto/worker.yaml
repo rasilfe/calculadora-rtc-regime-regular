@@ -1,5 +1,9 @@
-# Um pod só, com limite de 1,5 GiB (heap de ~1 GiB pelo MaxRAMPercentage=70).
-# Rollout derruba o pod antigo antes de subir o novo: não há memória para os dois.
+# Até 2 pods (keda.yaml) de 768 MiB cada. Medido na homologação: o heap vivo do worker
+# é de ~70 MB e a memória fora do heap de ~190 MB; com MaxRAMPercentage=60 o heap pode
+# chegar a ~460 MB, 6 vezes o necessário, sem passar do limite.
+# Rollout com um pod extra (maxSurge: 1) e nenhum fora (maxUnavailable: 0): o deploy não
+# para o consumo. Com 2 réplicas ativas o pod extra passa do orçamento de limites por
+# alguns segundos, mas o uso real (~450 MB por pod) cabe na VM.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -8,8 +12,8 @@ metadata:
 spec:
   strategy:
     rollingUpdate:
-      maxSurge: 0
-      maxUnavailable: 1
+      maxSurge: 1
+      maxUnavailable: 0
   template:
     spec:
       topologySpreadConstraints: null
@@ -22,13 +26,15 @@ spec:
               value: "5"
             - name: DB_POOL_MAX
               value: "4"
+            - name: JAVA_TOOL_OPTIONS
+              value: "-XX:MaxRAMPercentage=60 -XX:+ExitOnOutOfMemoryError"
             # sem Jaeger neste ambiente (não cabe na memória): sem isso o exportador OTLP
             # registra um erro a cada lote de spans
             - name: TRACING_HABILITADO
               value: "false"
           resources:
             requests:
-              cpu: "1"
-              memory: 1Gi
+              cpu: 500m
+              memory: 512Mi
             limits:
-              memory: 1536Mi
+              memory: 768Mi

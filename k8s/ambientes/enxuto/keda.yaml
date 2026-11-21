@@ -1,4 +1,6 @@
-# Sem memória para um segundo pod: o KEDA mantém exatamente 1 réplica.
+# De 1 a 2 pods do worker, pela fila (value=500 da base: acima de 500 notas paradas sobe
+# o segundo pod). O terceiro não cabe no orçamento de memória da VM (ver worker.yaml) e,
+# com 4 vCPU divididas com RabbitMQ e PostgreSQL, quase não aumentaria a vazão.
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
@@ -6,4 +8,4 @@ metadata:
   namespace: rtc
 spec:
   minReplicaCount: 1
-  maxReplicaCount: 1
+  maxReplicaCount: 2

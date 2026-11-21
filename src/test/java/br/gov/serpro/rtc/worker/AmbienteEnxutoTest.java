@@ -133,11 +133,14 @@ class AmbienteEnxutoTest {
     }
 
     @Test
-    void umWorkerSoERolloutSemPodExtra() {
+    void ateDoisWorkersERolloutSemPararOConsumo() {
         final var keda = mapa(doc(PATCHES, "ScaledObject", "rtc-worker"), "spec");
-        assertThat(keda).containsEntry("minReplicaCount", 1).containsEntry("maxReplicaCount", 1);
+        assertThat(keda).containsEntry("minReplicaCount", 1).containsEntry("maxReplicaCount", 2);
         final var rolling = mapa(mapa(mapa(doc(PATCHES, "Deployment", "rtc-worker"), "spec"), "strategy"), "rollingUpdate");
-        assertThat(rolling).containsEntry("maxSurge", 0).containsEntry("maxUnavailable", 1);
+        assertThat(rolling).containsEntry("maxSurge", 1).containsEntry("maxUnavailable", 0);
+        // heap menor que o limite padrão de 70%: sobra memória fora do heap no pod de 768 MiB
+        assertThat(env(doc(PATCHES, "Deployment", "rtc-worker"), "JAVA_TOOL_OPTIONS"))
+                .contains("-XX:MaxRAMPercentage=60", "-XX:+ExitOnOutOfMemoryError");
     }
 
     @Test
@@ -147,8 +150,12 @@ class AmbienteEnxutoTest {
         final var redis = mapa(container(doc(BASE_DOCS, "Deployment", "rtc-redis")), "resources");
         final var postgres = mapa(container(patchPostgres), "resources");
 
-        final double memoria = gib(worker, "limits") + gib(rabbit, "limits") + gib(redis, "limits") + gib(postgres, "limits");
-        final double cpu = cpu(worker, "requests") + cpu(rabbit, "requests") + cpu(redis, "requests") + cpu(postgres, "requests");
+        final int workers = maxWorkers();
+
+        final double memoria = workers * gib(worker, "limits") + gib(rabbit, "limits") + gib(redis, "limits")
+                + gib(postgres, "limits");
+        final double cpu = workers * cpu(worker, "requests") + cpu(rabbit, "requests") + cpu(redis, "requests")
+                + cpu(postgres, "requests");
         assertThat(memoria).as("limite de memória somado (GiB)").isLessThanOrEqualTo(MEMORIA_DISPONIVEL_GIB);
         assertThat(cpu).as("CPU reservada (vCPU)").isLessThanOrEqualTo(CPU_DISPONIVEL);
     }
@@ -163,11 +170,16 @@ class AmbienteEnxutoTest {
                 maxConexoes = Integer.parseInt(m.group(1));
             }
         }
-        // 1 worker + Job de migração (pool padrão do Hikari) + folga para administração
-        assertThat(pool + 10 + 5).isLessThanOrEqualTo(maxConexoes);
+        // todos os workers + Job de migração (pool padrão do Hikari) + folga para administração;
+        // no rollout há um pod extra (maxSurge: 1)
+        assertThat((maxWorkers() + 1) * pool + 10 + 5).isLessThanOrEqualTo(maxConexoes);
     }
 
     // ------------------------------------------------------------------ apoio
+
+    private static int maxWorkers() {
+        return ((Number) mapa(doc(PATCHES, "ScaledObject", "rtc-worker"), "spec").get("maxReplicaCount")).intValue();
+    }
 
     private static Map<String, Object> doc(List<Map<String, Object>> docs, String kind, String nome) {
         return docs.stream().filter(d -> kind.equals(d.get("kind")) && nome.equals(mapa(d, "metadata").get("name")))
