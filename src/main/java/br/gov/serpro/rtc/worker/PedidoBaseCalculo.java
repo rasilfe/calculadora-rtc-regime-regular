@@ -3,9 +3,11 @@ package br.gov.serpro.rtc.worker;
 import java.util.UUID;
 
 /**
- * Pedido lido da fila {@code rtc.basecalculo.entrada}: base unificada ou base da NFS-e.
+ * Pedido lido da fila {@code rtc.basecalculo.entrada}: base unificada, base da NFS-e ou base do Imposto
+ * Seletivo sobre mercadorias.
  */
-public sealed interface PedidoBaseCalculo permits BaseCalculoEntrada, BaseCalculoNfseEntrada {
+public sealed interface PedidoBaseCalculo permits BaseCalculoEntrada, BaseCalculoNfseEntrada,
+        BaseCalculoISMercadoriasEntrada {
 
     TipoBaseCalculo tipo();
 

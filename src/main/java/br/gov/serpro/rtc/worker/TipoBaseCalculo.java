@@ -13,7 +13,10 @@ public enum TipoBaseCalculo {
     UNIFICADA,
 
     /** Base da NFS-e (IBS/CBS e Simples Nacional), algoritmo oficial do endpoint {@code base-calculo-unificada-nfse}. */
-    NFSE;
+    NFSE,
+
+    /** Base do Imposto Seletivo sobre mercadorias, algoritmo oficial do endpoint {@code is-mercadorias}. */
+    IS_MERCADORIAS;
 
     /**
      * Lê o {@code tipo} do envelope (sem diferenciar maiúsculas).

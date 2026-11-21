@@ -202,7 +202,8 @@ propriedades da nota). O `payload` é o JSON do antigo endpoint, com os componen
 `baseSN` e `avisos` sobre campos ignorados) ou `ERRO` (e `erros` no mesmo formato dos erros
 de nota: campo obrigatório ausente, valor negativo, ou `REG-024` para `tipoDocumento`
 diferente de 55 e 65). Cabeçalhos: `message_id` e `correlation_id` = correlationId,
-`x-cnpj`, `x-status`, `x-tipo` (`UNIFICADA` ou `NFSE`) e `x-id-calculo` (se informado).
+`x-cnpj`, `x-status`, `x-tipo` (`UNIFICADA`, `NFSE` ou `IS_MERCADORIAS`) e `x-id-calculo` (se
+informado).
 
 Diferenças em relação à nota: não há idempotência no Redis (o cálculo é puro e leva
 milissegundos; uma reentrega recalcula e publica de novo) e não há rejeição por
@@ -254,6 +255,38 @@ Como no endpoint original, erros de negócio (`E1534`, `BASE-NEGATIVA`, `EXXX-RE
 `EXXX-LOC-SN`, `LEIAUTE-XTP`) não impedem a apuração: o resultado traz `status` `ERRO`, os
 mesmos erros em `erros` e as bases calculadas em `resultadoNfse`. Campo obrigatório
 ausente, valor negativo ou locação sem o grupo `locacao` dão `ERRO` sem `resultadoNfse`.
+
+### Base de cálculo do Imposto Seletivo sobre mercadorias
+
+Calcula a base do IS sobre mercadorias com o algoritmo oficial do antigo
+`POST /calculadora/base-calculo/is-mercadorias` (release 1.6.1).
+
+**Entrada:** mesma fila, routing key (`base.<CNPJ>`) e permissões; o envelope leva
+`"tipo": "IS_MERCADORIAS"`. Todos os valores são opcionais (ausente vale zero) e não
+podem ser negativos:
+
+```json
+{
+  "schemaVersion": "1",
+  "tipo": "IS_MERCADORIAS",
+  "correlationId": "8a7b6c5d-4e3f-4a1b-9c2d-1e0f9a8b7c6d",
+  "idCalculo": "pedido-123-item-1",
+  "payload": {
+    "anoFatoGerador": 2027,
+    "valorBem": 1000.00, "freteCobrado": 50.00, "juros": 10.00,
+    "icms": 180.00, "descontoIncondicional": 20.00
+  }
+}
+```
+
+| Integram a base (somam) | Não integram (subtraem) |
+|---|---|
+| `valorBem`, `ajusteAcrescimos`, `juros`, `multas`, `encargos`, `freteCobrado`, `outrosTributos`, `demaisImportancias` | `icms`, `iss`, `cosip`, `ipi`, `descontoIncondicional`, `bonificacao` (art. 417), `devolucaoVendas` (art. 418) |
+
+**Saída:** mesma fila `rtc.basecalculo.saida.<CNPJ>`, com `"tipo": "IS_MERCADORIAS"` e
+`resultadoIs.baseCalculo`. São recusados com `ERRO` (`REG-024`): ano anterior a 2027
+(ponteiro `#/anoFatoGerador`), `icms` ou `iss` informados a partir de 2033 e base negativa.
+Valor negativo num campo dá erro de validação apontando para o campo.
 
 ## Garantias do worker
 
