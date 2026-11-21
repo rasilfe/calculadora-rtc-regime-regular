@@ -35,7 +35,6 @@ public final class CbsIbsOutput {
     private TributacaoCompraGovernamentalDomain compraGovernamental;
     private DiferimentoDomain grupoDiferimento;
     private GrupoMonofasiaOutput grupoMonofasia;
-    private String memoriaCalculo;
     
     public boolean possuiCompraGov() {
         return compraGovernamental != null;

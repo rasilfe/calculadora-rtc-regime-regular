@@ -13,7 +13,7 @@ import br.gov.serpro.rtc.api.model.input.basecalculo.enumeration.BaseCalculoNatu
 import br.gov.serpro.rtc.api.model.input.basecalculo.enumeration.BaseCalculoOperacao;
 import br.gov.serpro.rtc.api.model.input.basecalculo.enumeration.ElementoBaseCalculo;
 import br.gov.serpro.rtc.api.model.output.basecalculo.BaseCalculoUnificadaOutput;
-import br.gov.serpro.rtc.core.util.ArredondamentoUtils;
+import br.gov.serpro.rtc.shared.util.ArredondamentoUtils;
 import br.gov.serpro.rtc.domain.service.exception.CampoInvalidoException;
 
 /**
@@ -24,15 +24,26 @@ import br.gov.serpro.rtc.domain.service.exception.CampoInvalidoException;
 public class BaseCalculoUnificadaService {
 
     /**
-     * Calcula a partir do DTO do endpoint dedicado.
+     * Calcula a partir do DTO do endpoint dedicado. As bases da resposta são publicadas com 2
+     * casas, arredondadas uma vez por {@code ArredondamentoUtils.arredondarValorFiscal}.
      */
     public BaseCalculoUnificadaOutput calcular(BaseCalculoUnificadaInput input) {
-        return calcular(input.getComponentes(), input.getAnoFatoGerador(), input.getNatureza(), input.getTipoDocumento());
+        final BaseCalculoUnificadaOutput exato = calcular(input.getComponentes(), input.getAnoFatoGerador(),
+                input.getNatureza(), input.getTipoDocumento());
+        return new BaseCalculoUnificadaOutput(
+                ArredondamentoUtils.arredondarValorFiscal(exato.getBaseRG()),
+                ArredondamentoUtils.arredondarValorFiscal(exato.getBaseIS()),
+                ArredondamentoUtils.arredondarValorFiscal(exato.getBaseSN()),
+                exato.getAvisos());
     }
 
     /**
      * Calcula a partir dos componentes + contexto (e qualquer outro caller que já possua os 
      * componentes separados do input do endpoint).
+     * <p>
+     * As bases devolvidas aqui são as somas exatas dos componentes, sem arredondamento: a
+     * validação da base declarada contra os componentes compara valores exatos. O número
+     * publicado é arredondado por quem publica (o endpoint dedicado ou o cálculo do item).
      *
      * @param componentes os componentes da base de cálculo
      * @param ano o ano do fato gerador

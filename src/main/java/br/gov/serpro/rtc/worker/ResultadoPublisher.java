@@ -15,8 +15,8 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Publica o {@link ResultadoNota} na Fila de Saída e só retorna depois que o
@@ -111,7 +111,7 @@ public class ResultadoPublisher {
         final byte[] corpo;
         try {
             corpo = objectMapper.writeValueAsBytes(resultado);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Falha ao serializar o resultado " + correlationId, e);
         }
         final var props = new MessageProperties();

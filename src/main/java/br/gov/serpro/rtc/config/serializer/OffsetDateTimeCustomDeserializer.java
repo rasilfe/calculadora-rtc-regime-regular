@@ -8,9 +8,9 @@ import java.time.OffsetDateTime;
 
 import org.springframework.stereotype.Component;
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonDeserializer;
+import tools.jackson.core.JsonParser;
+import tools.jackson.databind.DeserializationContext;
+import tools.jackson.databind.ValueDeserializer;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -29,12 +29,12 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Component
-public final class OffsetDateTimeCustomDeserializer extends JsonDeserializer<OffsetDateTime> {
+public final class OffsetDateTimeCustomDeserializer extends ValueDeserializer<OffsetDateTime> {
     private static final String PATTERN = "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}([+-]\\d{2}:\\d{2}|Z)";
     private static final String FORMAT = "yyyy-MM-dd'T'HH:mm:ssXXX";
     private static final String VALID_EXAMPLE = "2026-01-05T13:45:00-03:00 ou 2026-05-22T10:57:23Z";
 
-    private static final JsonDeserializer<OffsetDateTime> INSTANCE =     
+    private static final ValueDeserializer<OffsetDateTime> INSTANCE =     
             new GenericCustomDeserializer<>(
                     PATTERN,
                     FORMAT,
@@ -52,7 +52,7 @@ public final class OffsetDateTimeCustomDeserializer extends JsonDeserializer<Off
      * @throws IOException quando houver falha de leitura ou valor inválido
      */
     @Override
-    public OffsetDateTime deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+    public OffsetDateTime deserialize(JsonParser p, DeserializationContext ctxt) {
         return INSTANCE.deserialize(p, ctxt);
     }
     
@@ -62,7 +62,7 @@ public final class OffsetDateTimeCustomDeserializer extends JsonDeserializer<Off
      * @return instância interna de {@link GenericCustomDeserializer}
      */
     @Override
-    public JsonDeserializer<?> getDelegatee() {
+    public ValueDeserializer<?> getDelegatee() {
         return INSTANCE;
     }
 

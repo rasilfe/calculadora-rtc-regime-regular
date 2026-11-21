@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 
 import br.gov.serpro.rtc.api.exceptionhandler.dto.ErroDetalhe;
@@ -58,7 +58,7 @@ class CalculoNotaListenerTest {
         canal = mock(Channel.class);
         properties = new WorkerProperties();
         registry = new SimpleMeterRegistry();
-        listener = new CalculoNotaListener(calculo, publisher, idempotencia, new ObjectMapper().findAndRegisterModules(),
+        listener = new CalculoNotaListener(calculo, publisher, idempotencia, new ObjectMapper(),
                 properties, registry);
         when(idempotencia.adquirir(anyString(), any(), anyString(), anyBoolean())).thenReturn(Aquisicao.ADQUIRIDA);
     }

@@ -12,13 +12,12 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.Resource;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 
 import br.gov.serpro.rtc.api.model.input.ItemOperacaoInput;
 import br.gov.serpro.rtc.api.model.input.OperacaoInput;
@@ -30,7 +29,6 @@ import br.gov.serpro.rtc.domain.service.CalculadoraService;
  * informado).
  */
 @SpringBootTest
-@AutoConfigureMockMvc
 @TestPropertySource(locations = "classpath:application-testes.yml")
 @ActiveProfiles("testes")
 class Teste_000001_9 {
@@ -112,8 +110,9 @@ class Teste_000001_9 {
     @Test
     void testValoresComCasasDecimais() throws Exception {
         configurar("200.50", "188.25", "12.25");
-        // vIS = 188.25 x 13% + 21.30 = 45.7725; BC CBS/IBS = 188.25 + 45.7725
-        isEqualByComparingTo(calcularBaseCalculoIbsCbs(), "234.0225");
+        // vIS = 188.25 x 13% + 21.30 = 45.7725, publicado com 2 casas: 45.77 (meio para o par).
+        // É o vIS publicado que entra na base: BC CBS/IBS = 188.25 + 45.77
+        isEqualByComparingTo(calcularBaseCalculoIbsCbs(), "234.02");
     }
 
     @Test

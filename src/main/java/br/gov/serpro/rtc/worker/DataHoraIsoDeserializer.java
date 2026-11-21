@@ -1,13 +1,12 @@
 package br.gov.serpro.rtc.worker;
 
-import java.io.IOException;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonDeserializer;
+import tools.jackson.core.JsonParser;
+import tools.jackson.databind.DeserializationContext;
+import tools.jackson.databind.ValueDeserializer;
 
 /**
  * Data e hora ISO-8601 com fuso, com segundos e fração opcionais
@@ -17,10 +16,10 @@ import com.fasterxml.jackson.databind.JsonDeserializer;
  * {@link OffsetDateTime} omite os segundos quando são zero; com o formato estrito das
  * datas da operação, uma em cada 60 mensagens de um produtor Java seria recusada.
  */
-public class DataHoraIsoDeserializer extends JsonDeserializer<OffsetDateTime> {
+public class DataHoraIsoDeserializer extends ValueDeserializer<OffsetDateTime> {
 
     @Override
-    public OffsetDateTime deserialize(JsonParser parser, DeserializationContext contexto) throws IOException {
+    public OffsetDateTime deserialize(JsonParser parser, DeserializationContext contexto) {
         final String texto = parser.getValueAsString();
         if (texto == null || texto.isBlank()) {
             return null;

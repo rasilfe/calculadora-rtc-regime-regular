@@ -9,7 +9,7 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 
 import br.gov.serpro.rtc.api.model.output.basecalculo.BaseCalculoUnificadaOutput;
 import br.gov.serpro.rtc.domain.service.basecalculo.BaseCalculoUnificadaService;

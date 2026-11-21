@@ -17,17 +17,19 @@ import org.springframework.core.io.Resource;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 
 import br.gov.serpro.rtc.api.model.input.OperacaoInput;
 import br.gov.serpro.rtc.domain.service.CalculadoraService;
 import br.gov.serpro.rtc.domain.service.exception.ImpostoSeletivoNaoAdmitidoTipoDfeException;
+import br.gov.serpro.rtc.domain.service.exception.SituacaoTributariaNaoEncontradaException;
 
 /**
  * Caso de aceitação 8 — Imposto Seletivo com tpDoc:
  * - tpDoc 55/65 (whitelist): IS aceito como hoje;
  * - tpDoc fora da whitelist com NCM que exige IS: erro de item;
- * - grupo IS supérfluo (NCM não exige IS): segue ignorado;
+ * - sem incidência de IS, o grupo não participa do cálculo, mas CST e
+ *   classificação tributária informados continuam sendo validados;
  * - sem tpDoc: comportamento atual (coberto pela suíte existente).
  */
 @SpringBootTest
@@ -78,13 +80,13 @@ class Teste_tpdoc_8_ImpostoSeletivo {
     }
 
     @Test
-    @DisplayName("tpDoc 62 (fora da whitelist): grupo IS supérfluo é ignorado")
-    void teste_tpDocForaWhitelist_grupoIsSuperfluoIgnorado() throws IOException {
+    @DisplayName("tpDoc 62: sem incidência, grupo não calcula IS mas valida CST")
+    void teste_tpDocForaWhitelist_grupoSemIncidenciaValidaCst() throws IOException {
         // Em 2026 o NCM 24021000 não é tributado pelo IS; o grupo informado
-        // desnecessariamente continua sendo ignorado (sem erro)
+        // não participa do cálculo, mas seus dados tributários são validados.
         OperacaoInput operacao = ler(entradaImpostoSeletivoSuperfluo2026);
-        assertThatCode(() -> calculadoraService.calcularTributos(operacao))
-                .doesNotThrowAnyException();
+        assertThatThrownBy(() -> calculadoraService.calcularTributos(operacao))
+                .isExactlyInstanceOf(SituacaoTributariaNaoEncontradaException.class);
     }
 
     @Test

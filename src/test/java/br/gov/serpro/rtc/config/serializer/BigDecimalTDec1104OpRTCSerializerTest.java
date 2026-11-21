@@ -9,9 +9,9 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.annotation.JsonSerialize;
 
 /**
  * Testes para o serializador de quantidade TDec_1104OpRTC.
@@ -35,7 +35,7 @@ class BigDecimalTDec1104OpRTCSerializerTest {
 
     @ParameterizedTest(name = "{index} => valor={0}, esperado={1}")
     @MethodSource("cenariosQuantidade")
-    void deveSerializarQuantidadeConformePadrao(String input, String valorEsperado) throws JsonProcessingException {
+    void deveSerializarQuantidadeConformePadrao(String input, String valorEsperado) throws JacksonException {
         var wrapper = new Wrapper(input);
         var json = mapper.writeValueAsString(wrapper);
         var jsonEsperado = "{\"value\":\"" + valorEsperado + "\"}";

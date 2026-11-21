@@ -3,7 +3,7 @@ package br.gov.serpro.rtc.worker;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 import br.gov.serpro.rtc.api.model.input.OperacaoInput;
 

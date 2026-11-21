@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 
 import br.gov.serpro.rtc.api.model.SerializationVisibility;
 import br.gov.serpro.rtc.api.model.input.basecalculo.ComponentesBaseCalculoInput;
+import br.gov.serpro.rtc.domain.model.entity.TipoDfe;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Digits;
@@ -91,4 +92,40 @@ public final class ItemOperacaoInput implements SerializationVisibility {
 	@Valid
 	@Schema(name = "aliquotasNominais", description = "Alíquotas nominais aplicáveis à operação. Obrigatório para operações a partir de 01/01/2027 e proibido antes dessa data")
 	private AliquotasNominaisInput aliquotasNominais;
+	
+	/**
+	 * Ajusta o NCM do item de operação para {@code null} quando o tipo de documento
+	 * fiscal permite NCM zerado e o NCM informado representa zero.
+	 *
+	 * @param tipoDfe o tipo de documento fiscal ({@code tpDoc}) da operação
+	 */
+	public void ajustarNcm(TipoDfe tipoDfe) {
+	    if (!deveAnularNcm(tipoDfe)) {
+	        return;
+	    }
+
+	    this.ncm = null;
+	}
+
+	/**
+	 * Verifica se o NCM desta instância deve ser limpo.
+	 *
+	 * @param tipoDfe o tipo de documento fiscal
+	 * @return true se o NCM deve ser limpo, false caso contrário
+	 */
+	private boolean deveAnularNcm(TipoDfe tipoDfe) {
+	    return tipoDfe != null
+	            && tipoDfe.isPermiteNcmZero()
+	            && possuiNcmZero();
+	}
+
+	/**
+	 * Verifica se o NCM desta instância representa um valor zerado.
+	 *
+	 * @return true se o NCM é "00" ou "00000000", false caso contrário
+	 */
+	private boolean possuiNcmZero() {
+	    return "00".equals(this.ncm) || "00000000".equals(this.ncm);
+	}
+
 }

@@ -5,10 +5,11 @@ import static java.math.BigDecimal.ZERO;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Objects;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import tools.jackson.databind.annotation.JsonSerialize;
 
 import br.gov.serpro.rtc.api.model.SerializationVisibility;
 import br.gov.serpro.rtc.config.serializer.BigDecimalTDec1302Serializer;
@@ -56,7 +57,7 @@ public class IBSTotalDomain implements SerializationVisibility {
             ibsTotal.setGIBSUF(gIBSUF != null ? gIBSUF : new IBSUFTotalDomain());
             ibsTotal.setGIBSMun(gIBSMun != null ? gIBSMun : new IBSMunTotalDomain());
             
-            ibsTotal.setVIBS(getValorIbsTotal(ibsTotal.getGIBSUF(), ibsTotal.getGIBSMun()));
+            ibsTotal.setVIBS(getValorIbsTotal(detalhes));
             ibsTotal.setVCredPres(getValorCreditoPresumidoTotal(detalhes));
             ibsTotal.setVCredPresCondSus(getValorCreditoPresumidoCondSusTotal(detalhes));
             return ibsTotal;
@@ -64,10 +65,18 @@ public class IBSTotalDomain implements SerializationVisibility {
         return null;
     }
 
-    private static BigDecimal getValorIbsTotal(IBSUFTotalDomain ibsUFTotal, IBSMunTotalDomain ibsMunTotal) {
-        BigDecimal vIBSUF = ibsUFTotal != null ? ibsUFTotal.getVIBSUF() : ZERO;
-        BigDecimal vIBSMun = ibsMunTotal != null ? ibsMunTotal.getVIBSMun() : ZERO;
-        return vIBSUF.add(vIBSMun);
+    /**
+     * Total do IBS: soma dos {@code vIBS} publicados nos itens. Como cada {@code vIBS} de item é
+     * a soma do {@code vIBSUF} e do {@code vIBSMun} publicados, o total também é igual à soma dos
+     * totais da UF e do Município.
+     */
+    private static BigDecimal getValorIbsTotal(List<ObjetoDomain> detalhes) {
+        return detalhes.stream()
+                .map(ObjetoDomain::getGrupoIBSCBS)
+                .filter(Objects::nonNull)
+                .map(GrupoIBSCBSDomain::getVIBS)
+                .filter(Objects::nonNull)
+                .reduce(ZERO, BigDecimal::add);
     }
     
     private static BigDecimal getValorCreditoPresumidoTotal(List<ObjetoDomain> detalhes) {

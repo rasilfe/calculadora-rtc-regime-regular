@@ -7,7 +7,7 @@ import java.math.BigDecimal;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import tools.jackson.databind.annotation.JsonSerialize;
 
 import br.gov.serpro.rtc.api.model.SerializationVisibility;
 import br.gov.serpro.rtc.config.serializer.BigDecimalTDec0302_04Serializer;
@@ -16,6 +16,7 @@ import br.gov.serpro.rtc.config.serializer.StringTCSTSerializer;
 import br.gov.serpro.rtc.config.serializer.StringTcClassTribSerializer;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Builder;
+import lombok.extern.jackson.Jacksonized;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -26,6 +27,7 @@ import lombok.Setter;
 @Getter
 @Setter
 @Builder
+@Jacksonized
 @JsonInclude(NON_NULL)
 @JsonPropertyOrder({ "CSTReg", "cClassTribReg", "pAliqEfetRegIBSUF", "vTribRegIBSUF", "pAliqEfetRegIBSMun", "vTribRegIBSMun", "pAliqEfetRegCBS", "vTribRegCBS" })
 public class TributacaoRegularDomain implements SerializationVisibility {

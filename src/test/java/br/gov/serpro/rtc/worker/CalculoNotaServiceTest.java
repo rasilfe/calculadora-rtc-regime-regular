@@ -22,7 +22,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.util.StreamUtils;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 
 import br.gov.serpro.rtc.api.model.input.OperacaoInput;
 import br.gov.serpro.rtc.api.model.roc.ObservabilidadeItemDomain;

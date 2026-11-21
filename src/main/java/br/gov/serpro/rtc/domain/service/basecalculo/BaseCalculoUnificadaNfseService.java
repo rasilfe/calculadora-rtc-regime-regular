@@ -16,7 +16,7 @@ import br.gov.serpro.rtc.api.model.input.basecalculo.enumeration.SituacaoOperaca
 import br.gov.serpro.rtc.api.model.input.basecalculo.enumeration.TipoAjusteNfse;
 import br.gov.serpro.rtc.api.model.output.basecalculo.BaseCalculoUnificadaNfseOutput;
 import br.gov.serpro.rtc.api.model.output.basecalculo.ErroBaseCalculoNfse;
-import br.gov.serpro.rtc.core.util.ArredondamentoUtils;
+import br.gov.serpro.rtc.shared.util.ArredondamentoUtils;
 import br.gov.serpro.rtc.domain.service.exception.CampoInvalidoException;
 
 /**
@@ -84,8 +84,9 @@ public class BaseCalculoUnificadaNfseService {
             avisos.add("Optante pendente: cálculo realizado com ressalva");
         }
 
-        BigDecimal baseRGFinal = baseRG != null ? baseRG.setScale(2, java.math.RoundingMode.HALF_EVEN) : null;
-        BigDecimal baseSNFinal = baseSN != null ? baseSN.setScale(2, java.math.RoundingMode.HALF_EVEN) : null;
+        // bases publicadas: 2 casas, arredondadas uma vez pela política numérica
+        BigDecimal baseRGFinal = ArredondamentoUtils.arredondarValorFiscal(baseRG);
+        BigDecimal baseSNFinal = ArredondamentoUtils.arredondarValorFiscal(baseSN);
 
         if (baseRGFinal != null && baseRGFinal.compareTo(BigDecimal.ZERO) < 0) {
             erros.add(new ErroBaseCalculoNfse("BASE-NEGATIVA",
@@ -220,7 +221,7 @@ public class BaseCalculoUnificadaNfseService {
 
     private BigDecimal calcularBaseRGLocacao(BaseCalculoUnificadaNfseInput input) {
         LocacaoNfseInput loc = input.getLocacao();
-        BigDecimal fator = ArredondamentoUtils.dividirPorCem(loc.getPCopropriedade());
+        BigDecimal fator = ArredondamentoUtils.percentualParaFracao(loc.getPCopropriedade());
 
         // vServEfetivo = (pCopropriedade/100) × vTotOper
         BigDecimal vServEfetivo = ArredondamentoUtils.multiplicar(fator, loc.getVTotOper());
@@ -280,7 +281,7 @@ public class BaseCalculoUnificadaNfseService {
 
     private BigDecimal calcularBaseSNLocacao(BaseCalculoUnificadaNfseInput input) {
         LocacaoNfseInput loc = input.getLocacao();
-        BigDecimal fator = ArredondamentoUtils.dividirPorCem(loc.getPCopropriedade());
+        BigDecimal fator = ArredondamentoUtils.percentualParaFracao(loc.getPCopropriedade());
 
         BigDecimal vServEfetivo = ArredondamentoUtils.multiplicar(fator, loc.getVTotOper());
         BigDecimal vDescIncondEfetivo = ArredondamentoUtils.multiplicar(fator, loc.getVDescIncondTot());

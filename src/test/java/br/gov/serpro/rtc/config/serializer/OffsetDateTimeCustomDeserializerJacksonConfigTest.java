@@ -13,8 +13,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.exc.InvalidFormatException;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.exc.InvalidFormatException;
 
 import br.gov.serpro.rtc.config.JacksonConfig;
 

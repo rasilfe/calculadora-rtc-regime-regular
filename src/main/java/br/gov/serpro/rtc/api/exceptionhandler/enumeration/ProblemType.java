@@ -11,11 +11,11 @@ import br.gov.serpro.rtc.domain.model.enumeration.EstadoItemEnum;
 import br.gov.serpro.rtc.domain.service.exception.AliquotaAdRemNaoEncontradaException;
 import br.gov.serpro.rtc.domain.service.exception.AliquotaImpostoSeletivoNaoInformadaException;
 import br.gov.serpro.rtc.domain.service.exception.AliquotaNaoEncontradaException;
-import br.gov.serpro.rtc.domain.service.exception.AliquotasNominaisInformadasIndevidamenteException;
-import br.gov.serpro.rtc.domain.service.exception.AliquotasNominaisNaoInformadasException;
 import br.gov.serpro.rtc.domain.service.exception.AliquotaNegativaException;
 import br.gov.serpro.rtc.domain.service.exception.AliquotaPadraoNaoEncontradaException;
 import br.gov.serpro.rtc.domain.service.exception.AliquotaReferenciaNaoEncontradaException;
+import br.gov.serpro.rtc.domain.service.exception.AliquotasNominaisInformadasIndevidamenteException;
+import br.gov.serpro.rtc.domain.service.exception.AliquotasNominaisNaoInformadasException;
 import br.gov.serpro.rtc.domain.service.exception.BaseCalculoComponentesInconsistenteException;
 import br.gov.serpro.rtc.domain.service.exception.BaseCalculoInconsistenteException;
 import br.gov.serpro.rtc.domain.service.exception.BaseCalculoMenorBaseCalculoImpostoSeletivoException;
@@ -51,9 +51,10 @@ import br.gov.serpro.rtc.domain.service.exception.NomenclaturaNaoPermitidaTipoDf
 import br.gov.serpro.rtc.domain.service.exception.NomenclaturaObrigatoriaNaoInformadaException;
 import br.gov.serpro.rtc.domain.service.exception.PercentualReducaoNaoEncontradoException;
 import br.gov.serpro.rtc.domain.service.exception.SiglaDFeNaoEncontradaException;
-import br.gov.serpro.rtc.domain.service.exception.TipoDfeNaoEncontradoException;
 import br.gov.serpro.rtc.domain.service.exception.SituacaoTributariaNaoEncontradaException;
 import br.gov.serpro.rtc.domain.service.exception.TipoAliquotaDesconhecidoException;
+import br.gov.serpro.rtc.domain.service.exception.TipoDfeNaoEncontradoException;
+import br.gov.serpro.rtc.domain.service.exception.TipoDfeNaoTratadoException;
 import br.gov.serpro.rtc.domain.service.exception.TratamentoClassificacaoNaoEncontradoException;
 import br.gov.serpro.rtc.domain.service.exception.TratamentoTributarioNaoEncontradoException;
 import br.gov.serpro.rtc.domain.service.exception.TributacaoRegularInformadaIndevidamenteException;
@@ -255,6 +256,11 @@ public enum ProblemType {
             "Alíquotas nominais não informadas", "aliquotas-nominais-nao-informadas",
             new CodigoErro("REG-037", "aliquotasNominais", EstadoItemEnum.INCONSISTENCIA_ENTRADA),
             "As alíquotas nominais (cbs, ibsEstadual e ibsMunicipal) devem ser informadas para fato gerador a partir de 01/01/2027."),
+    
+    TIPO_DFE_NAO_TRATADO(TipoDfeNaoTratadoException.class,
+			"Tipo de documento fiscal não tratado", "tipo-dfe-nao-tratado",
+			new CodigoErro("REG-038", "tpDoc", EstadoItemEnum.INCONSISTENCIA_ENTRADA),
+			"O tipo de documento fiscal (tpDoc) informado na operação não possui tratamento implementado na calculadora."),
 
     // === CAL ===
 

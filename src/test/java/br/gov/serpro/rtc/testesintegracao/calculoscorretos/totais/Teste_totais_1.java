@@ -9,13 +9,12 @@ import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.core.io.Resource;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 
 import br.gov.serpro.rtc.api.model.input.OperacaoInput;
 import br.gov.serpro.rtc.api.model.roc.IBSCBSTotalDomain;
@@ -24,7 +23,6 @@ import br.gov.serpro.rtc.domain.service.CalculadoraService;
 
 @Disabled
 @SpringBootTest
-@AutoConfigureMockMvc
 @TestPropertySource(locations = "classpath:application-testes.yml")
 @ActiveProfiles("testes")
 class Teste_totais_1 {

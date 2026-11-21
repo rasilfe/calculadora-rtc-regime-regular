@@ -8,7 +8,7 @@ import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import tools.jackson.databind.annotation.JsonSerialize;
 
 import br.gov.serpro.rtc.api.model.SerializationVisibility;
 import br.gov.serpro.rtc.config.serializer.BigDecimalTDec1302Serializer;

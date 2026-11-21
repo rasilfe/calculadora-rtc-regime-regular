@@ -47,8 +47,6 @@ proposição de uma decisão até sua aceitação.
 
 [ADR004 - Banco de Dados SQLite Somente-Leitura](./ADR004-banco-sqlite-somente-leitura.md)
 
-[ADR005 - Adoção de Spring Boot 3 e Java 21](./ADR005-adocao-spring-boot-3-java-21.md)
-
 [ADR006 - Documentação de API com SpringDoc OpenAPI](./ADR006-documentacao-api-com-springdoc.md)
 
 [ADR007 - Estratégia de Tratamento de Erros](./ADR007-estrategia-de-tratamento-de-erros.md)
@@ -58,6 +56,12 @@ proposição de uma decisão até sua aceitação.
 [ADR009 - Migrações e Versionamento do Banco de Dados](./ADR009-migracoes-e-versionamento-do-banco.md)
 
 [ADR010 - Estratégia de Observabilidade](./ADR010-estrategia-de-observabilidade.md)
+
+[ADR011 - Adoção de Spring Boot 4 e Java 25](./ADR011-adocao-spring-boot-4-java-25.md)
+
+## Substituídos
+
+[ADR005 - Adoção de Spring Boot 3 e Java 21](./ADR005-adocao-spring-boot-3-java-21.md)
 
 ## Propostos
 

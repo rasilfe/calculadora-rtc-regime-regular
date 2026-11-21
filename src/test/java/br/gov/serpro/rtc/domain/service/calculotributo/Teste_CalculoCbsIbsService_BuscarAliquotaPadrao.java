@@ -6,6 +6,7 @@ package br.gov.serpro.rtc.domain.service.calculotributo;
 import static br.gov.serpro.rtc.domain.model.enumeration.FormaAplicacaoEnum.ACRESCIMO;
 import static br.gov.serpro.rtc.domain.model.enumeration.FormaAplicacaoEnum.DECRESCIMO;
 import static br.gov.serpro.rtc.domain.model.enumeration.FormaAplicacaoEnum.SUBSTITUICAO;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.Mockito.times;
@@ -13,7 +14,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -88,8 +88,7 @@ class Teste_CalculoCbsIbsService_BuscarAliquotaPadrao {
 
         // Assert
         assertNotNull(resultado);
-        assertEquals(new BigDecimal("0.26500000"), resultado);
-        assertEquals(8, resultado.scale());
+        assertThat(resultado).isEqualByComparingTo("0.265");
         verify(aliquotaPadraoService, times(1)).buscarAliquota(idTributo, codigoUf, codigoMunicipio, data);
     }
 
@@ -108,8 +107,7 @@ class Teste_CalculoCbsIbsService_BuscarAliquotaPadrao {
 
         // Assert
         assertNotNull(resultado);
-        assertEquals(new BigDecimal("0.28000000"), resultado);
-        assertEquals(8, resultado.scale());
+        assertThat(resultado).isEqualByComparingTo("0.28");
         verify(aliquotaPadraoService, times(1)).buscarAliquota(idTributo, codigoUf, codigoMunicipio, data);
     }
 
@@ -128,8 +126,7 @@ class Teste_CalculoCbsIbsService_BuscarAliquotaPadrao {
 
         // Assert
         assertNotNull(resultado);
-        assertEquals(new BigDecimal("0.25000000"), resultado);
-        assertEquals(8, resultado.scale());
+        assertThat(resultado).isEqualByComparingTo("0.25");
         verify(aliquotaPadraoService, times(1)).buscarAliquota(idTributo, codigoUf, codigoMunicipio, data);
     }
 
@@ -148,8 +145,7 @@ class Teste_CalculoCbsIbsService_BuscarAliquotaPadrao {
 
         // Assert
         assertNotNull(resultado);
-        assertEquals(new BigDecimal("0.12750000"), resultado);
-        assertEquals(8, resultado.scale());
+        assertThat(resultado).isEqualByComparingTo("0.1275");
         verify(aliquotaPadraoService, times(1)).buscarAliquota(idTributo, codigoUf, codigoMunicipio, data);
     }
 
@@ -167,8 +163,7 @@ class Teste_CalculoCbsIbsService_BuscarAliquotaPadrao {
 
         // Assert
         assertNotNull(resultado);
-        assertEquals(new BigDecimal("0.00000000"), resultado);
-        assertEquals(8, resultado.scale());
+        assertThat(resultado).isEqualByComparingTo("0");
         verify(aliquotaPadraoService, times(1)).buscarAliquota(idTributo, codigoUf, codigoMunicipio, data);
     }
 
@@ -186,8 +181,7 @@ class Teste_CalculoCbsIbsService_BuscarAliquotaPadrao {
 
         // Assert
         assertNotNull(resultado);
-        assertEquals(new BigDecimal("0.17345000"), resultado);
-        assertEquals(8, resultado.scale());
+        assertThat(resultado).isEqualByComparingTo("0.17345");
         verify(aliquotaPadraoService, times(1)).buscarAliquota(idTributo, codigoUf, codigoMunicipio, data);
     }
 
@@ -206,8 +200,7 @@ class Teste_CalculoCbsIbsService_BuscarAliquotaPadrao {
 
         // Assert
         assertNotNull(resultado);
-        assertEquals(new BigDecimal("0.25000000"), resultado);
-        assertEquals(8, resultado.scale());
+        assertThat(resultado).isEqualByComparingTo("0.25");
         verify(aliquotaPadraoService, times(1)).buscarAliquota(idTributoIBS, codigoUf, codigoMunicipio, data);
     }
 
@@ -226,8 +219,7 @@ class Teste_CalculoCbsIbsService_BuscarAliquotaPadrao {
 
         // Assert
         assertNotNull(resultado);
-        assertEquals(new BigDecimal("0.24000000"), resultado);
-        assertEquals(8, resultado.scale());
+        assertThat(resultado).isEqualByComparingTo("0.24");
         verify(aliquotaPadraoService, times(1)).buscarAliquota(idTributo, codigoUfRJ, codigoMunicipio, data);
     }
 
@@ -246,8 +238,7 @@ class Teste_CalculoCbsIbsService_BuscarAliquotaPadrao {
 
         // Assert
         assertNotNull(resultado);
-        assertEquals(new BigDecimal("0.28000000"), resultado);
-        assertEquals(8, resultado.scale());
+        assertThat(resultado).isEqualByComparingTo("0.28");
         verify(aliquotaPadraoService, times(1)).buscarAliquota(idTributo, codigoUf, codigoMunicipio, dataFutura);
     }
 
@@ -266,8 +257,7 @@ class Teste_CalculoCbsIbsService_BuscarAliquotaPadrao {
 
         // Assert
         assertNotNull(resultado);
-        assertEquals(new BigDecimal("0.00000000"), resultado);
-        assertEquals(8, resultado.scale());
+        assertThat(resultado).isEqualByComparingTo("0");
         verify(aliquotaPadraoService, times(1)).buscarAliquota(idTributo, codigoUf, codigoMunicipio, data);
     }
 
@@ -286,8 +276,7 @@ class Teste_CalculoCbsIbsService_BuscarAliquotaPadrao {
 
         // Assert
         assertNotNull(resultado);
-        assertEquals(new BigDecimal("0.18000000"), resultado);
-        assertEquals(8, resultado.scale());
+        assertThat(resultado).isEqualByComparingTo("0.18");
         verify(aliquotaPadraoService, times(1)).buscarAliquota(idTributo, codigoUf, codigoMunicipio, data);
     }
 
@@ -306,14 +295,13 @@ class Teste_CalculoCbsIbsService_BuscarAliquotaPadrao {
 
         // Assert
         assertNotNull(resultado);
-        assertEquals(new BigDecimal("0.15250000"), resultado);
-        assertEquals(8, resultado.scale());
+        assertThat(resultado).isEqualByComparingTo("0.1525");
         verify(aliquotaPadraoService, times(1)).buscarAliquota(idTributo, codigoUf, codigoMunicipio, data);
     }
 
     @Test
     void teste_BuscarAliquotaPadrao_VerificaDivisaoPor100() {
-        // Arrange - verifica que 100.00 / 100 = 1.00000000
+        // Arrange - verifica que 100.00 / 100 = 1.0000: a conversão só desloca a vírgula
         BigDecimal valorReferencia = new BigDecimal("100.00");
         AliquotaResultadoDTO aliquotaDTO = new AliquotaResultadoDTO(valorReferencia, null, null);
         
@@ -325,9 +313,7 @@ class Teste_CalculoCbsIbsService_BuscarAliquotaPadrao {
 
         // Assert
         assertNotNull(resultado);
-        assertEquals(new BigDecimal("1.00000000"), resultado);
-        assertEquals(8, resultado.scale());
-        assertEquals(RoundingMode.HALF_UP, resultado.scale() >= 0 ? RoundingMode.HALF_UP : null);
+        assertEquals(new BigDecimal("1.0000"), resultado);
         verify(aliquotaPadraoService, times(1)).buscarAliquota(idTributo, codigoUf, codigoMunicipio, data);
     }
 

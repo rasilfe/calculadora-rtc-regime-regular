@@ -3,11 +3,10 @@
  */
 package br.gov.serpro.rtc.domain.service.calculotributo;
 
-import static br.gov.serpro.rtc.core.util.ArredondamentoUtils.arredondarInterno;
+import static br.gov.serpro.rtc.shared.util.ArredondamentoUtils.dividir;
 import static java.math.BigDecimal.ZERO;
 
 import java.math.BigDecimal;
-import java.math.MathContext;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -25,6 +24,9 @@ import jakarta.annotation.PostConstruct;
 /**
  * Serviço responsável por avaliar com segurança expressões aritméticas usadas
  * nas fórmulas tributárias, preservando precisão com BigDecimal.
+ * <p>
+ * A conta é exata: o resultado de uma expressão não é arredondado. O arredondamento de cada
+ * número publicado é feito uma vez, por quem chama, com {@code ArredondamentoUtils}.
  */
 @Service
 public class AvaliadorExpressaoAritmetica {
@@ -44,8 +46,10 @@ public class AvaliadorExpressaoAritmetica {
     }
     
     /**
-     * Custom JEXL Arithmetic that converts all numbers to BigDecimal
-     * to avoid integer division issues (e.g., 5/100 = 0 in integer division)
+     * Aritmética do JEXL com a política numérica da Calculadora: todos os números viram
+     * BigDecimal (evita a divisão inteira, em que 5/100 daria 0); soma, subtração e
+     * multiplicação são exatas; só a divisão, que pode não terminar, usa o contexto de divisão
+     * de {@code ArredondamentoUtils}.
      */
     private static class BigDecimalArithmetic extends JexlArithmetic {
         
@@ -54,8 +58,22 @@ public class AvaliadorExpressaoAritmetica {
         }
         
         @Override
+        public Object add(Object left, Object right) {
+            return toBigDecimal(left).add(toBigDecimal(right));
+        }
+
+        @Override
+        public Object subtract(Object left, Object right) {
+            return toBigDecimal(left).subtract(toBigDecimal(right));
+        }
+
+        @Override
+        public Object multiply(Object left, Object right) {
+            return toBigDecimal(left).multiply(toBigDecimal(right));
+        }
+
+        @Override
         public Object divide(Object left, Object right) {
-            // Convert both operands to BigDecimal to ensure decimal division
             BigDecimal leftBD = toBigDecimal(left);
             BigDecimal rightBD = toBigDecimal(right);
             
@@ -63,8 +81,8 @@ public class AvaliadorExpressaoAritmetica {
                 throw new ArithmeticException("Division by zero");
             }
             
-            // Use a high precision for intermediate calculations
-            return leftBD.divide(rightBD, MathContext.DECIMAL128);
+            // Única operação que pode não terminar: usa o contexto de divisão da política numérica
+            return dividir(leftBD, rightBD);
         }
         
         @Override
@@ -77,7 +95,7 @@ public class AvaliadorExpressaoAritmetica {
         }
     }
     
-    public BigDecimal evaluate(String expression, Map<String, BigDecimal> variables, int scale) {
+    public BigDecimal evaluate(String expression, Map<String, BigDecimal> variables) {
         final var exprTrim = expression.trim();
         // Caso 1: expressão é só o nome da variável
         if (variables.containsKey(exprTrim)) {
@@ -89,25 +107,13 @@ public class AvaliadorExpressaoAritmetica {
             throw new RuntimeException("Valor não mapeado corretamente: " + exprTrim);
         }
 
-        /*
-        // Caso 2: expressão é só um número
-        try {
-            if (exprTrim.matches("^\\d+(\\.\\d+)?$")) {
-                // É possivelmente um número positivo, pode criar BigDecimal
-                final var valor = new BigDecimal(exprTrim);
-                return valor.setScale(scale, HALF_UP);
-            }
-        } catch (NumberFormatException ignore) {
-            // Não é número, segue para JEXL
-        }
-        */
-    
         // Caso geral: usa JEXL
         final JexlExpression jexp = expressionEngine.createExpression(expression);
         final Object evaluate = jexp.evaluate(new MapContextBigDecimal(variables));
         if (evaluate instanceof Number n) {
-            BigDecimal result = NumberUtils.convertNumberToTargetClass(n, BigDecimal.class);
-            return arredondarInterno(result);
+            // Conta exata: o resultado não é arredondado aqui. Quem chama arredonda, uma vez, o
+            // número que vai ser publicado.
+            return NumberUtils.convertNumberToTargetClass(n, BigDecimal.class);
         } else {
             throw new NumberFormatException("Erro ao avaliar expressão: " + evaluate);
         }

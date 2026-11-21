@@ -1,10 +1,10 @@
 package br.gov.serpro.rtc.config.serializer;
 
-import br.gov.serpro.rtc.core.util.ArredondamentoUtils;
+import br.gov.serpro.rtc.shared.util.ArredondamentoUtils;
 
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.databind.JsonSerializer;
-import com.fasterxml.jackson.databind.SerializerProvider;
+import tools.jackson.core.JsonGenerator;
+import tools.jackson.databind.ValueSerializer;
+import tools.jackson.databind.SerializationContext;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -20,13 +20,13 @@ import java.math.BigDecimal;
  *   <li>Números decimais: exatamente 4 casas decimais (ex: 55.5555, 55.5500, 0.0001)</li>
  * </ul>
  *
- * Thread-safe: delega para {@link ArredondamentoUtils#formatarQuantidade(BigDecimal)}.
- * DecimalFormat não é thread-safe, mas o método formatarQuantidade é sincronizado, garantindo segurança em ambientes multi-thread.
+ * Thread-safe: delega para {@link ArredondamentoUtils#formatarQuantidade(BigDecimal)}, que não guarda estado.
+ * O serializer apenas formata a quantidade.
  */
-public class BigDecimalTDec1104OpRTCSerializer extends JsonSerializer<BigDecimal> {
+public class BigDecimalTDec1104OpRTCSerializer extends ValueSerializer<BigDecimal> {
 
     @Override
-    public void serialize(BigDecimal value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+    public void serialize(BigDecimal value, JsonGenerator gen, SerializationContext serializers) {
         if (value == null) {
             gen.writeNull();
         } else if (value.signum() < 0) {

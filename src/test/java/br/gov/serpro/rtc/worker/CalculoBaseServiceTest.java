@@ -10,7 +10,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 
 import br.gov.serpro.rtc.api.exceptionhandler.dto.ErroDetalhe;
 import br.gov.serpro.rtc.api.model.input.basecalculo.BaseCalculoUnificadaInput;
@@ -25,7 +25,7 @@ import jakarta.validation.Validation;
  */
 class CalculoBaseServiceTest {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final ObjectMapper MAPPER = new ObjectMapper();
     private static CalculoBaseService service;
 
     @BeforeAll

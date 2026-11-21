@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,16 +16,15 @@ import org.springframework.core.io.Resource;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 
 import br.gov.serpro.rtc.api.exceptionhandler.dto.ErroDetalhe;
+import br.gov.serpro.rtc.api.exceptionhandler.enumeration.ProblemType;
 import br.gov.serpro.rtc.api.model.input.OperacaoInput;
+import br.gov.serpro.rtc.domain.model.enumeration.EstadoItemEnum;
 import br.gov.serpro.rtc.domain.service.CalculadoraService;
 import br.gov.serpro.rtc.domain.service.ObservabilidadeService;
-import br.gov.serpro.rtc.domain.service.collector.ErrosCalculoException;
-import br.gov.serpro.rtc.domain.service.exception.ErroFaltaImplementacaoException;
 import br.gov.serpro.rtc.util.CalculoTestSupport;
-import br.gov.serpro.rtc.worker.StatusNota;
 
 @SpringBootTest
 @TestPropertySource(locations = "classpath:application-testes.yml")
@@ -44,6 +44,8 @@ class Teste_validacao_22_ErroFaltaImplementacaoException {
     private ObservabilidadeService observabilidadeService;
     
     private OperacaoInput operacao; 
+    
+    private static final ProblemType ERRO = ProblemType.ERRO_FALTA_IMPLEMENTACAO;
 
     @BeforeEach
     void beforeEach(
@@ -53,51 +55,41 @@ class Teste_validacao_22_ErroFaltaImplementacaoException {
     }
 
     @Test
-    void teste_service_CalcularTributos() {
+    @DisplayName("Deve lançar ErroFaltaImplementacaoException ao calcular tributos no serviço")
+    void deveLancarErroFaltaImplementacaoNoServico() {
         assertThatThrownBy(() -> calculadoraService.calcularTributos(operacao))
-                .isExactlyInstanceOf(ErroFaltaImplementacaoException.class);
+                .isExactlyInstanceOf(ERRO.getClasseErro());
     }
 
     @Test
-    void teste_service_CalcularTributos_NFeAbi() {
-        operacao.setTpDoc(77);
-        assertThatThrownBy(() -> calculadoraService.calcularTributos(operacao))
-                .isExactlyInstanceOf(ErroFaltaImplementacaoException.class);
-    }
-
-    @Test
-    void teste_service_CalcularTributos_Dere() {
-        operacao.setTpDoc(94);
-        assertThatThrownBy(() -> calculadoraService.calcularTributos(operacao))
-                .isExactlyInstanceOf(ErroFaltaImplementacaoException.class);
-    }
-
-    @Test
-    void teste_calculoNota_CalcularTributos() throws Exception {
+    @DisplayName("Na fila de notas o item volta com o erro de classificação em desenvolvimento")
+    void deveRetornarErroNoCalculoDaNota() throws Exception {
         final String jsonContent = objectMapper.writeValueAsString(operacao);
-        assertThat(calculoTestSupport.titulosErro(jsonContent)).contains("Classificação tributária em desenvolvimento");
+        assertThat(calculoTestSupport.titulosErro(jsonContent)).contains(ERRO.getTitulo());
     }
 
     @Test
-    void teste_calculoNota_CalcularTributos_NFeAbi() throws Exception {
-        operacao.setTpDoc(77);
-        final String jsonContent = objectMapper.writeValueAsString(operacao);
-        assertThat(calculoTestSupport.titulosErro(jsonContent)).contains("Classificação tributária em desenvolvimento");
+    @DisplayName("Deve processar operação com estado NAO_IMPLEMENTADO no serviço de observabilidade")
+    void deveProcessarComEstadoNaoImplementadoNoServicoObservabilidade() {
+        final var roc = observabilidadeService.processarOperacao(operacao, "http://localhost:8080");
+
+        assertThat(roc).isNotNull();
+
+        final var objetos = roc.getObjetos();
+        assertThat(objetos).isNotNull().hasSize(1);
+        assertThat(objetos.get(0).getEstadoItem()).hasToString(EstadoItemEnum.NAO_IMPLEMENTADO.name());
+        assertThat(objetos.get(0).getErros()).isNotNull().hasSize(1)
+                .filteredOn(erro -> erro.code().equals(ERRO.getCodigoErro().codigo())).isNotEmpty()
+                .filteredOn(erro -> erro.title().equals(ERRO.getTitulo())).isNotEmpty();
     }
 
     @Test
-    void teste_observabilidade_CalcularTributos_NFeAbi() {
-        operacao.setTpDoc(77);
-        assertThatThrownBy(() -> observabilidadeService.processarOperacao(operacao, "http://localhost:8080"))
-                .isExactlyInstanceOf(ErrosCalculoException.class);
-    }
-
-    @Test
-    void teste_calculoNota_CalcularTributos_NFeAbi_codigoErro() throws Exception {
-        operacao.setTpDoc(77);
+    @DisplayName("Na fila de notas o erro é do item (NAO_IMPLEMENTADO), não da nota")
+    void deveRetornarErroDoItemNoCalculoDaNota() throws Exception {
         final var resultado = calculoTestSupport.calcularNota(objectMapper.writeValueAsString(operacao));
-        assertThat(resultado.status()).isEqualTo(StatusNota.ERRO);
-        assertThat(resultado.errosNota()).extracting(ErroDetalhe::code).first().isEqualTo("CAL-007");
+        assertThat(resultado.errosNota()).isNullOrEmpty();
+        assertThat(CalculoTestSupport.erros(resultado)).extracting(ErroDetalhe::code)
+                .containsExactly(ERRO.getCodigoErro().codigo());
     }
 
 }

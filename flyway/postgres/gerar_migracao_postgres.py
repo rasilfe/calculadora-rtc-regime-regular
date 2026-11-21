@@ -85,6 +85,7 @@ def main(caminho_sqlite):
     ddl, dados, extras = [], [], []
     problemas = []
     avisos = {}  # coluna -> valores data/hora truncados para data
+    avisos_tipo = []  # tipos e DEFAULTs fora do padrão normalizados
 
     for t in tabelas:
         sql_criacao = con.execute("SELECT sql FROM sqlite_master WHERE name=?", (t,)).fetchone()[0]
@@ -101,7 +102,11 @@ def main(caminho_sqlite):
                 pg = tipo_u.lower()
             elif tipo_u == "BOOLEAN":
                 pg = "boolean"
-            elif tipo_u == "TEXT":
+            elif "TEXT" in tipo_u or "CLOB" in tipo_u:
+                # Regra de afinidade do SQLite: tipo que contém TEXT é texto. A V0069 do
+                # upstream declara "MUNI_INICIO_VIGENCIA status TEXT" (erro de digitação).
+                if tipo_u != "TEXT":
+                    avisos_tipo.append(f"{t}.{nome}: tipo {tipo!r} lido como TEXT (afinidade do SQLite)")
                 eh_data = (nome.upper().endswith("_VIGENCIA") or nome.upper() in entidades_data
                            or (valores and all(isinstance(v, str) and DATA_RE.match(v) for v in valores)))
                 pg = "date" if eh_data else "text"
@@ -135,6 +140,13 @@ def main(caminho_sqlite):
                     definicao += " DEFAULT CURRENT_DATE"
                 elif default.lower().startswith("strftime("):
                     definicao += """ DEFAULT to_char(now(), 'YYYY-MM-DD"T"HH24:MI:SS.MS-0300')"""
+                elif pg == "boolean" and default.strip("'") in ("0", "1"):
+                    # o SQLite guarda booleano como inteiro (a V0067 usa DEFAULT 0/1)
+                    definicao += " DEFAULT " + ("TRUE" if default.strip("'") == "1" else "FALSE")
+                elif pg == "date" and not DATA_RE.match(default.strip("'")):
+                    # o SQLite aceita qualquer texto como DEFAULT de "data" (a V0069 usa 'date');
+                    # no PostgreSQL seria erro: a coluna fica sem DEFAULT
+                    avisos_tipo.append(f"{t}.{nome}: DEFAULT {default} não é data e foi descartado")
                 else:
                     definicao += f" DEFAULT {default}"
             linhas_col.append(definicao)
@@ -219,6 +231,8 @@ def main(caminho_sqlite):
 
     for coluna, n in avisos.items():
         print(f"aviso: {coluna}: {n} valores com hora gravados só com a data (a entidade lê LocalDate)")
+    for aviso in avisos_tipo:
+        print(f"aviso: {aviso}")
     if problemas:
         print("Conversão interrompida:\n  " + "\n  ".join(problemas), file=sys.stderr)
         sys.exit(1)

@@ -34,7 +34,14 @@ public class NomenclaturaService {
     private final NcmAplicavelRepository ncmAplicavelRepository;
     private final NbsAplicavelRepository nbsAplicavelRepository;
 
-    private static final Set<String> EXCEPTION_CLASSIFICACOES = Set.of("200038");
+    /*
+     * Classificações vinculadas a anexo misto (NCM e NBS) em que o NCM não
+     * representa locação de bens: NF-e/NFC-e aceitam apenas NCM e NFS-e aceita
+     * apenas NBS (em vez de MISTO). Caso do Anexo IX da LC 214/2025 (insumos
+     * agropecuários e aquícolas), usado por 200038 (redução de 60%) e 515001
+     * (diferimento).
+     */
+    private static final Set<String> EXCEPTION_CLASSIFICACOES = Set.of("200038", "515001");
 
     /**
      * Determina a nomenclatura (NCM, NBS, MISTO, SEM ou exceção) aplicável para uma

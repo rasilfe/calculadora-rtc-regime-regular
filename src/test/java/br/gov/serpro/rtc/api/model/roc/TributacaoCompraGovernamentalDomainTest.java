@@ -21,11 +21,70 @@ import org.junit.jupiter.api.Test;
 
 class TributacaoCompraGovernamentalDomainTest {
 
+	/** Base de cálculo do domínio de teste: as alíquotas de 20%, 10% e 5% valem 200, 100 e 50. */
+	private static final BigDecimal VBC = new BigDecimal("1000.00");
+
+	@Test
+	void compraDaUniao_valorPelaAliquotaPublicada_naoPelaSomaDoDetalhe() {
+		// T5: base 12,00; CBS 8,8% (1,06), IBS 0,05% + 0,05% (0,01 + 0,01). O detalhe soma 1,08;
+		// o grupo principal é 12,00 × 8,90% = 1,068 → 1,07.
+		var detalhe = TributacaoCompraGovernamentalDomain.builder()
+				.pAliqCBS(new BigDecimal("8.8000")).vTribCBS(new BigDecimal("1.06"))
+				.pAliqIBSUF(new BigDecimal("0.0500")).vTribIBSUF(new BigDecimal("0.01"))
+				.pAliqIBSMun(new BigDecimal("0.0500")).vTribIBSMun(new BigDecimal("0.01"))
+				.build();
+
+		var resultado = detalhe.getValoresEfetivos(UNIAO, ZERO, LocalDate.of(2027, 3, 15), new BigDecimal("12.00"));
+
+		assertResultado(resultado, new BigDecimal("8.90"), new BigDecimal("1.07"), ZERO, ZERO, ZERO, ZERO);
+		assertThat(resultado.getVTribCBS().scale()).isEqualTo(2);
+	}
+
+	@Test
+	void transferenciaDaCbs_quemCedeArredonda_quemRecebeFechaPelaDiferenca() {
+		// CBS 1,2345% com transferência de 10%: fica 1,11105 → 1,1110 (meio para o par). A parte
+		// transferida, 0,12345, arredondada por conta própria daria 0,1234 e a soma cairia para
+		// 1,2344; pela diferença, quem recebe fica com 0,1235 e a soma das alíquotas se preserva.
+		var detalhe = TributacaoCompraGovernamentalDomain.builder()
+				.pAliqCBS(new BigDecimal("1.2345"))
+				.pAliqIBSUF(ZERO)
+				.pAliqIBSMun(ZERO)
+				.build();
+
+		var estado = detalhe.getValoresEfetivos(ESTADO, new BigDecimal("10"), LocalDate.of(2029, 1, 1), VBC);
+		assertResultado(estado, new BigDecimal("1.1110"), new BigDecimal("11.11"), new BigDecimal("0.1235"),
+				new BigDecimal("1.24"), ZERO, ZERO);
+		assertThat(somarPercentuais(estado)).isEqualByComparingTo("1.2345");
+
+		var municipio = detalhe.getValoresEfetivos(MUNICIPIO, new BigDecimal("10"), LocalDate.of(2029, 1, 1), VBC);
+		assertResultado(municipio, new BigDecimal("1.1110"), new BigDecimal("11.11"), ZERO, ZERO,
+				new BigDecimal("0.1235"), new BigDecimal("1.24"));
+		assertThat(somarPercentuais(municipio)).isEqualByComparingTo("1.2345");
+	}
+
+	@Test
+	void transferenciaDaCbs_estadoRecebeTambemOIbsDoMunicipio() {
+		// detalhe com redução de 60%: CBS 3,5249; IBS UF 2,9333; IBS Mun 0,4938; base 1.234,57
+		var detalhe = TributacaoCompraGovernamentalDomain.builder()
+				.pAliqCBS(new BigDecimal("3.5249"))
+				.pAliqIBSUF(new BigDecimal("2.9333"))
+				.pAliqIBSMun(new BigDecimal("0.4938"))
+				.build();
+
+		var resultado = detalhe.getValoresEfetivos(ESTADO, new BigDecimal("10"), LocalDate.of(2029, 1, 1),
+				new BigDecimal("1234.57"));
+
+		// CBS: 3,5249 × 0,9 = 3,17241 → 3,1724; IBS UF: 6,9520 − 3,1724 = 3,7796
+		assertResultado(resultado, new BigDecimal("3.1724"), new BigDecimal("39.17"), new BigDecimal("3.7796"),
+				new BigDecimal("46.66"), ZERO, ZERO);
+		assertThat(somarPercentuais(resultado)).isEqualByComparingTo(somarPercentuais(detalhe));
+	}
+
 	@Test
 	void deveRetornarNuloQuandoTipoEnteForNulo() {
 		var domain = criarDomainBase();
 
-		var resultado = domain.getValoresEfetivos(null, new BigDecimal("25"), LocalDate.of(2027, 1, 1));
+		var resultado = domain.getValoresEfetivos(null, new BigDecimal("25"), LocalDate.of(2027, 1, 1), VBC);
 
 		assertThat(resultado).isNull();
 	}
@@ -35,7 +94,7 @@ class TributacaoCompraGovernamentalDomainTest {
 		var domain = criarDomainBase();
 
 		assertThatNullPointerException()
-				.isThrownBy(() -> domain.getValoresEfetivos(ESTADO, new BigDecimal("25"), null))
+				.isThrownBy(() -> domain.getValoresEfetivos(ESTADO, new BigDecimal("25"), null, VBC))
 				.withMessage("Data do fato gerador obrigatória");
 	}
 
@@ -44,7 +103,7 @@ class TributacaoCompraGovernamentalDomainTest {
 		var domain = criarDomainBase();
 
 		assertThatNullPointerException()
-				.isThrownBy(() -> domain.getValoresEfetivos(ESTADO, null, LocalDate.of(2027, 1, 1)))
+				.isThrownBy(() -> domain.getValoresEfetivos(ESTADO, null, LocalDate.of(2027, 1, 1), VBC))
 				.withMessage("Percentual de transferência da CBS obrigatória");
 	}
 
@@ -52,7 +111,7 @@ class TributacaoCompraGovernamentalDomainTest {
 	void deveRetornarMesmaInstanciaAntesDe2027() {
 		var domain = criarDomainBase();
 
-		var resultado = domain.getValoresEfetivos(ESTADO, new BigDecimal("25"), LocalDate.of(2026, 12, 31));
+		var resultado = domain.getValoresEfetivos(ESTADO, new BigDecimal("25"), LocalDate.of(2026, 12, 31), VBC);
 
 		assertThat(resultado).isSameAs(domain);
 	}
@@ -64,7 +123,7 @@ class TributacaoCompraGovernamentalDomainTest {
 			BigDecimal esperadoVTribIBSUF, BigDecimal esperadoPAliqIBSMun, BigDecimal esperadoVTribIBSMun) {
 		var domain = criarDomainBase();
 
-		var resultado = domain.getValoresEfetivos(UNIAO, pTransferenciaCBS, LocalDate.of(ano, 1, 1));
+		var resultado = domain.getValoresEfetivos(UNIAO, pTransferenciaCBS, LocalDate.of(ano, 1, 1), VBC);
 
 		assertSomasConservadas(domain, resultado);
 
@@ -79,7 +138,7 @@ class TributacaoCompraGovernamentalDomainTest {
 			BigDecimal esperadoVTribIBSUF, BigDecimal esperadoPAliqIBSMun, BigDecimal esperadoVTribIBSMun) {
 		var domain = criarDomainBase();
 
-		var resultado = domain.getValoresEfetivos(ESTADO, pTransferenciaCBS, LocalDate.of(ano, 1, 1));
+		var resultado = domain.getValoresEfetivos(ESTADO, pTransferenciaCBS, LocalDate.of(ano, 1, 1), VBC);
 
 		assertSomasConservadas(domain, resultado);
 
@@ -94,7 +153,7 @@ class TributacaoCompraGovernamentalDomainTest {
 			BigDecimal esperadoVTribIBSUF, BigDecimal esperadoPAliqIBSMun, BigDecimal esperadoVTribIBSMun) {
 		var domain = criarDomainBase();
 
-		var resultado = domain.getValoresEfetivos(MUNICIPIO, pTransferenciaCBS, LocalDate.of(ano, 1, 1));
+		var resultado = domain.getValoresEfetivos(MUNICIPIO, pTransferenciaCBS, LocalDate.of(ano, 1, 1), VBC);
 
 		assertSomasConservadas(domain, resultado);
 
@@ -109,7 +168,7 @@ class TributacaoCompraGovernamentalDomainTest {
 			BigDecimal esperadoVTribIBSUF, BigDecimal esperadoPAliqIBSMun, BigDecimal esperadoVTribIBSMun) {
 		var domain = criarDomainBase();
 
-		var resultado = domain.getValoresEfetivos(DISTRITO_FEDERAL, pTransferenciaCBS, LocalDate.of(ano, 1, 1));
+		var resultado = domain.getValoresEfetivos(DISTRITO_FEDERAL, pTransferenciaCBS, LocalDate.of(ano, 1, 1), VBC);
 
 		assertSomasConservadas(domain, resultado);
 
@@ -124,7 +183,7 @@ class TributacaoCompraGovernamentalDomainTest {
 			BigDecimal esperadoVTribIBSUF, BigDecimal esperadoPAliqIBSMun, BigDecimal esperadoVTribIBSMun) {
 		var domain = criarDomainBase();
 
-		var resultado = domain.getValoresEfetivos(CONSORCIO_PUBLICO, pTransferenciaCBS, LocalDate.of(ano, 1, 1));
+		var resultado = domain.getValoresEfetivos(CONSORCIO_PUBLICO, pTransferenciaCBS, LocalDate.of(ano, 1, 1), VBC);
 
 		assertSomasConservadas(domain, resultado);
 
@@ -139,7 +198,7 @@ class TributacaoCompraGovernamentalDomainTest {
 			BigDecimal esperadoVTribIBSUF, BigDecimal esperadoPAliqIBSMun, BigDecimal esperadoVTribIBSMun) {
 		var domain = criarDomainBase();
 
-		var resultado = domain.getValoresEfetivos(COMITE_GESTOR_IBS, pTransferenciaCBS, LocalDate.of(ano, 1, 1));
+		var resultado = domain.getValoresEfetivos(COMITE_GESTOR_IBS, pTransferenciaCBS, LocalDate.of(ano, 1, 1), VBC);
 
 		assertSomasConservadas(domain, resultado);
 

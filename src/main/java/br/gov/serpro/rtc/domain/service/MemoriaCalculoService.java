@@ -3,10 +3,14 @@
  */
 package br.gov.serpro.rtc.domain.service;
 
+import static br.gov.serpro.rtc.shared.util.ArredondamentoUtils.MODO;
 import static org.apache.commons.lang3.StringUtils.defaultString;
 
 import java.math.BigDecimal;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.time.LocalDate;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -25,6 +29,10 @@ import lombok.RequiredArgsConstructor;
 /**
  * Serviço responsável por gerar a memória de cálculo textual de CBS, IBS e
  * Imposto Seletivo com base nas fórmulas e fundamentações aplicáveis.
+ * <p>
+ * A memória mostra os números publicados na resposta (base com 2 casas, alíquotas com até 4), no
+ * formato brasileiro. Os valores chegam aqui já arredondados no cálculo; a formatação usa o modo
+ * único de {@code ArredondamentoUtils} e não altera o número.
  */
 @RequiredArgsConstructor
 @Service
@@ -37,11 +45,11 @@ public class MemoriaCalculoService {
     @Value("${application.memoriacalculo.enabled}")
     private boolean memoriaCalculoHabilitada;
 
-    public void gerarMemoriaCalculoCbsIbs(TratamentoClassificacaoDTO tratamentoClassificacao, CbsIbsOutput tributo, BigDecimal quantidade, String unidade, LocalDate data) {
+    public String gerarMemoriaCalculoCbsIbs(TratamentoClassificacaoDTO tratamentoClassificacao, CbsIbsOutput tributo, BigDecimal baseCalculoInformada, BigDecimal quantidade, String unidade, LocalDate data) {
         if (memoriaCalculoHabilitada) {
-            // CST sem gIBSCBS (ex: imunidade 410): não há objeto para armazenar a memória de cálculo
+            // CST sem gIBSCBS (ex: imunidade 410): usa a base informada no item e alíquota zero
             if (tributo == null) {
-                return;
+                tributo = CbsIbsOutput.builder().baseCalculo(baseCalculoInformada).build();
             }
 
             FundamentacaoClassificacaoDTO fundamentacaoClassificacao = fundamentacaoClassificacaoService
@@ -52,36 +60,36 @@ public class MemoriaCalculoService {
             
             String norma = fundamentacaoClassificacao.textoCurto();
             String tratamento = tt.getDescricao();
-            String baseCalculo = tributo.getBaseCalculo() != null ? tributo.getBaseCalculo().toString() : "0";
-            String aliquotaAdValorem = tributo.getAliquota() != null ? tributo.getAliquota().toString() : "0";
+            String baseCalculo = formatarMoeda(tributo.getBaseCalculo());
+            String aliquotaAdValorem = formatarPercentual(tributo.getAliquota());
             
             String aliquotaAdRem;
             if (tributo.getGrupoMonofasia() != null && tributo.getGrupoMonofasia().getTributoMonofasico() != null &&
                     tributo.getGrupoMonofasia().getTributoMonofasico().getAliquotaAdRem() != null) {
-                aliquotaAdRem = tributo.getGrupoMonofasia().getTributoMonofasico().getAliquotaAdRem().toString();
+                aliquotaAdRem = formatarPercentual(tributo.getGrupoMonofasia().getTributoMonofasico().getAliquotaAdRem());
             } else {
-                aliquotaAdRem = "0";
+                aliquotaAdRem = formatarPercentual(null);
             }
             
             String percentualReducao;
             if (tributo.getGrupoReducao() != null && tributo.getGrupoReducao().getPRedAliq() != null) {
-                percentualReducao = tributo.getGrupoReducao().getPRedAliq().toString();
+                percentualReducao = formatarPercentual(tributo.getGrupoReducao().getPRedAliq());
             } else {
-                percentualReducao = "0";
+                percentualReducao = formatarPercentual(null);
             }
             
-            String aliquotaDesoneracao = "0";
-            String montanteDesoneracao = "0";
+            String aliquotaDesoneracao = formatarPercentual(null);
+            String montanteDesoneracao = formatarMoeda(null);
             
             String percentualDiferimento;
             String valorDiferimento;
             if (tributo.getGrupoDiferimento() != null && tributo.getGrupoDiferimento().getPDif() != null &&
                     tributo.getGrupoDiferimento().getVDif() != null) {
-                percentualDiferimento = tributo.getGrupoDiferimento().getPDif().toString();
-                valorDiferimento = tributo.getGrupoDiferimento().getVDif().toString();
+                percentualDiferimento = formatarPercentual(tributo.getGrupoDiferimento().getPDif());
+                valorDiferimento = formatarMoeda(tributo.getGrupoDiferimento().getVDif());
             } else {
-                percentualDiferimento = "0";
-                valorDiferimento = "0";
+                percentualDiferimento = formatarPercentual(null);
+                valorDiferimento = formatarMoeda(null);
             }
             Map<String, String> valores = Map.ofEntries(
                     Map.entry("norma", defaultString(norma)),
@@ -99,9 +107,9 @@ public class MemoriaCalculoService {
                     Map.entry("montante_desoneracao", defaultString(montanteDesoneracao))
                     );
             String texto = fundamentacaoClassificacao.memoriaCalculo();
-            String memoria = StringUtils.isBlank(texto) ? "Texto de memória de cálculo não encontrado" : tokenizerService.substituirPlaceholders(texto, valores);
-            tributo.setMemoriaCalculo(memoria);
+            return StringUtils.isBlank(texto) ? "Texto de memória de cálculo não encontrado" : tokenizerService.substituirPlaceholders(texto, valores);
         }
+        return null;
     }
 
     public void gerarMemoriaCalculoImpostoSeletivo(TratamentoClassificacaoDTO tratamentoClassificacao, ImpostoSeletivoDomain tributo, BigDecimal quantidade, String unidade, LocalDate data) {
@@ -114,9 +122,9 @@ public class MemoriaCalculoService {
                     .buscar(tratamentoClassificacao.idTratamentoTributario());
             String tratamento = tt.getDescricao();
             
-            String baseCalculo = tributo.getVBCIS().toString();
-            String aliquotaAdValorem = tributo.getPIS() != null ? tributo.getPIS().toString() : null;
-            String aliquotaAdRem = tributo.getPISEspec() != null ? tributo.getPISEspec().toString() : null;
+            String baseCalculo = formatarMoeda(tributo.getVBCIS());
+            String aliquotaAdValorem = formatarPercentual(tributo.getPIS());
+            String aliquotaAdRem = formatarPercentual(tributo.getPISEspec());
             Map<String, String> valores = Map.ofEntries(
                     Map.entry("norma", defaultString(norma)),
                     Map.entry("tratamento", defaultString(tratamento)),
@@ -129,6 +137,19 @@ public class MemoriaCalculoService {
             String memoria = StringUtils.isBlank(texto) ? "Texto de memória de cálculo não encontrado": tokenizerService.substituirPlaceholders(texto, valores);
             tributo.setMemoriaCalculo(memoria);
         }
+    }
+
+    // DecimalFormat não é thread-safe: nova instância a cada chamada
+    private static String formatarMoeda(BigDecimal valor) {
+        final var formato = new DecimalFormat("#,##0.00", DecimalFormatSymbols.getInstance(Locale.forLanguageTag("pt-BR")));
+        formato.setRoundingMode(MODO);
+        return formato.format(valor != null ? valor : BigDecimal.ZERO);
+    }
+
+    private static String formatarPercentual(BigDecimal valor) {
+        final var formato = new DecimalFormat("#,##0.00##", DecimalFormatSymbols.getInstance(Locale.forLanguageTag("pt-BR")));
+        formato.setRoundingMode(MODO);
+        return formato.format(valor != null ? valor : BigDecimal.ZERO);
     }
 
 }

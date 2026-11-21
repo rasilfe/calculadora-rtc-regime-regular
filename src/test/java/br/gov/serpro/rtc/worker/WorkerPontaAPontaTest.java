@@ -30,8 +30,9 @@ import org.springframework.core.io.Resource;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 import com.github.fridujo.rabbitmq.mock.MockConnectionFactory;
 import com.rabbitmq.client.GetResponse;
 
@@ -208,11 +209,12 @@ class WorkerPontaAPontaTest {
 
         final Message resposta = receber(WorkerConfig.filaSaidaDaEmpresa(EMPRESA_A), ESPERA.toMillis());
         assertThat(resposta).as("resultado na fila da empresa A").isNotNull();
-        final ResultadoNota resultado = objectMapper.readValue(resposta.getBody(), ResultadoNota.class);
-        assertThat(resultado.correlationId()).isEqualTo(id);
-        assertThat(resultado.cnpj()).isEqualTo(EMPRESA_A);
-        assertThat(resultado.status()).isEqualTo(StatusNota.SUCESSO);
-        assertThat(resultado.resultado().getObjetos()).isNotEmpty();
+        // lido como JSON, como faz a empresa: o ROC é só serializado pelo worker
+        final JsonNode resultado = objectMapper.readTree(resposta.getBody());
+        assertThat(resultado.path("correlationId").asString()).isEqualTo(id.toString());
+        assertThat(resultado.path("cnpj").asString()).isEqualTo(EMPRESA_A);
+        assertThat(resultado.path("status").asString()).isEqualTo(StatusNota.SUCESSO.name());
+        assertThat(resultado.path("resultado").path("objetos").size()).isPositive();
         assertThat(resposta.getMessageProperties().getMessageId()).isEqualTo(id.toString());
         assertThat((String) resposta.getMessageProperties().getHeader("x-cnpj")).isEqualTo(EMPRESA_A);
 
@@ -231,8 +233,8 @@ class WorkerPontaAPontaTest {
 
         final Message paraB = receber(WorkerConfig.filaSaidaDaEmpresa(EMPRESA_B), ESPERA.toMillis());
         final Message paraA = receber(WorkerConfig.filaSaidaDaEmpresa(EMPRESA_A), ESPERA.toMillis());
-        assertThat(objectMapper.readValue(paraB.getBody(), ResultadoNota.class).correlationId()).isEqualTo(idB);
-        assertThat(objectMapper.readValue(paraA.getBody(), ResultadoNota.class).correlationId()).isEqualTo(idA);
+        assertThat(objectMapper.readTree(paraB.getBody()).path("correlationId").asString()).isEqualTo(idB.toString());
+        assertThat(objectMapper.readTree(paraA.getBody()).path("correlationId").asString()).isEqualTo(idA.toString());
         assertThat(receber(WorkerConfig.filaSaidaDaEmpresa(EMPRESA_A), 500)).isNull();
         assertThat(receber(WorkerConfig.filaSaidaDaEmpresa(EMPRESA_B), 500)).isNull();
     }

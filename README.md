@@ -40,7 +40,7 @@ Referência de vazão (uma JVM, 16 CPUs, 8 consumidores): **8.000 notas / 70.000
 - **Python 3**: só para regenerar as migrações PostgreSQL
 - Para executar: PostgreSQL, RabbitMQ 4.x e Redis (opcional)
 
-Principais tecnologias: Spring Boot 3.5, Spring AMQP, PostgreSQL + Flyway, Caffeine, Redis,
+Principais tecnologias: Spring Boot 4.1, Spring AMQP, PostgreSQL + Flyway, Caffeine, Redis,
 Micrometer (Prometheus e OpenTelemetry).
 
 ---

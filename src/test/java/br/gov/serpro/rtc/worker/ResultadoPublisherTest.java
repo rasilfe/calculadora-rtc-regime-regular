@@ -23,7 +23,7 @@ import org.springframework.amqp.core.ReturnedMessage;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Publicação com confirmação do broker (publisher confirms).
@@ -41,7 +41,7 @@ class ResultadoPublisherTest {
         template = mock(RabbitTemplate.class);
         properties = new WorkerProperties();
         properties.setTimeoutConfirmacao(Duration.ofMillis(200));
-        publisher = new ResultadoPublisher(template, new ObjectMapper().findAndRegisterModules(), properties);
+        publisher = new ResultadoPublisher(template, new ObjectMapper(), properties);
     }
 
     @Test

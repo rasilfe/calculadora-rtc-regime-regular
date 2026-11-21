@@ -3,9 +3,10 @@
  */
 package br.gov.serpro.rtc.domain.service.calculotributo;
 
-import static br.gov.serpro.rtc.core.util.ArredondamentoUtils.PRECISAO_INTERNA;
-
-import static br.gov.serpro.rtc.core.util.ArredondamentoUtils.dividirPorCem;
+import static br.gov.serpro.rtc.shared.util.ArredondamentoUtils.arredondarAliquotaPublicada;
+import static br.gov.serpro.rtc.shared.util.ArredondamentoUtils.arredondarValorFiscal;
+import static br.gov.serpro.rtc.shared.util.ArredondamentoUtils.fracaoParaPercentual;
+import static br.gov.serpro.rtc.shared.util.ArredondamentoUtils.percentualParaFracao;
 import static br.gov.serpro.rtc.domain.service.calculotributo.domain.VariavelExpressao.AJUSTE;
 import static br.gov.serpro.rtc.domain.service.calculotributo.domain.VariavelExpressao.ALIQUOTA;
 import static br.gov.serpro.rtc.domain.service.calculotributo.domain.VariavelExpressao.ALIQUOTA_AD_REM;
@@ -45,6 +46,11 @@ import lombok.RequiredArgsConstructor;
 /**
  * Serviço responsável por calcular o Imposto Seletivo a partir do tratamento
  * tributário, da alíquota aplicável e dos dados do item.
+ * <p>
+ * Política numérica (ADR003): a base ({@code vBCIS}) é arredondada a 2 casas e as alíquotas
+ * ({@code pIS} e {@code adRemIS}) a 4 casas antes da conta; o valor ({@code vIS}) é a conta exata
+ * sobre esses números publicados, arredondada uma vez a 2 casas. É o {@code vIS} publicado que
+ * entra na base do IBS e da CBS.
  */
 @RequiredArgsConstructor
 @Service
@@ -97,11 +103,12 @@ public class CalculoImpostoSeletivoService {
         BigDecimal valorAliquota = null;
         /////////////////////////////////
 
-        valorAliquotaAdValorem = aliquotaImpostoSeletivo.getAliquotaAdValorem();
+        // alíquotas publicadas (4 casas): são elas que entram na conta
+        valorAliquotaAdValorem = arredondarAliquotaPublicada(aliquotaImpostoSeletivo.getAliquotaAdValorem());
         if (valorAliquotaAdValorem != null) {
-            valorAliquotaAdValorem = dividirPorCem(valorAliquotaAdValorem);
+            valorAliquotaAdValorem = percentualParaFracao(valorAliquotaAdValorem);
         }
-        valorAliquotaAdRem = aliquotaImpostoSeletivo.getAliquotaAdRem();
+        valorAliquotaAdRem = arredondarAliquotaPublicada(aliquotaImpostoSeletivo.getAliquotaAdRem());
 
         /////////////////////////////
         BigDecimal resultadoAliquota = null;
@@ -155,7 +162,8 @@ public class CalculoImpostoSeletivoService {
                 entry(AJUSTE, valorAjuste),
                 entry(REDUTOR, valorRedutor));
 
-        resultadoBaseCalculo = avaliador.evaluate(expressaoBaseCalculo, variaveis2, PRECISAO_INTERNA);
+        // base publicada (2 casas): é ela que entra na conta
+        resultadoBaseCalculo = arredondarValorFiscal(avaliador.evaluate(expressaoBaseCalculo, variaveis2));
 
         var variaveis3 = ofEntries(
                 entry(QUANTIDADE, quantidade),
@@ -173,7 +181,8 @@ public class CalculoImpostoSeletivoService {
                 entry(AJUSTE, valorAjuste),
                 entry(REDUTOR, valorRedutor));
 
-        resultadoTributoCalculado = avaliador.evaluate(expressaoTributoCalculado, variaveis3, PRECISAO_INTERNA);
+        // conta exata sobre os números publicados, arredondada uma vez
+        resultadoTributoCalculado = arredondarValorFiscal(avaliador.evaluate(expressaoTributoCalculado, variaveis3));
 
         if (isNotBlank(expressaoTributoDevido)) {
 
@@ -194,7 +203,7 @@ public class CalculoImpostoSeletivoService {
                     entry(AJUSTE, valorAjuste),
                     entry(REDUTOR, valorRedutor));
 
-            resultadoTributoDevido = avaliador.evaluate(expressaoTributoDevido, variaveis4, PRECISAO_INTERNA);
+            resultadoTributoDevido = arredondarValorFiscal(avaliador.evaluate(expressaoTributoDevido, variaveis4));
         }
 
         return ImpostoSeletivoDomain
@@ -204,7 +213,7 @@ public class CalculoImpostoSeletivoService {
                 .qTrib(quantidade)
                 .uTrib(unidade)
                 .vIS(resultadoTributoDevido)
-                .pIS(valorAliquotaAdValorem != null ? valorAliquotaAdValorem.movePointRight(2) : valorAliquotaAdValorem) // para nao enviar a aliquota ad valorem dividida por 100
+                .pIS(fracaoParaPercentual(valorAliquotaAdValorem)) // para nao enviar a aliquota ad valorem dividida por 100
                 .pISEspec(valorAliquotaAdRem) // depreciado, mas mantido temporariamente para compatibilidade com clientes antigos
                 .adRemIS(valorAliquotaAdRem) // novo atributo para enviar a aliquota ad rem, substituindo o pISEspec que está depreciado
                 .vBCIS(resultadoBaseCalculo)

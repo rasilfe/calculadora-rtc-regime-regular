@@ -6,17 +6,15 @@ import java.time.LocalDate;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
-import br.gov.serpro.rtc.api.model.input.basecalculo.ComponentesBaseCalculoInput;
 import br.gov.serpro.rtc.api.model.input.AliquotasNominaisImpostoSeletivo;
 import br.gov.serpro.rtc.api.model.input.AliquotasNominaisInput;
 import br.gov.serpro.rtc.api.model.input.ImpostoSeletivoInput;
 import br.gov.serpro.rtc.api.model.input.ItemOperacaoInput;
 import br.gov.serpro.rtc.api.model.input.OperacaoInput;
+import br.gov.serpro.rtc.api.model.input.basecalculo.ComponentesBaseCalculoInput;
+import br.gov.serpro.rtc.api.model.input.basecalculo.enumeration.BaseCalculoNatureza;
 import br.gov.serpro.rtc.api.model.output.basecalculo.BaseCalculoUnificadaOutput;
 import br.gov.serpro.rtc.api.model.roc.TributosDomain;
-import br.gov.serpro.rtc.core.util.ArredondamentoUtils;
-
-import br.gov.serpro.rtc.api.model.input.basecalculo.enumeration.BaseCalculoNatureza;
 import br.gov.serpro.rtc.domain.model.dto.AliquotaAdRemDTO;
 import br.gov.serpro.rtc.domain.model.dto.AliquotaAdValoremDTO;
 import br.gov.serpro.rtc.domain.model.dto.ClassificacaoTributariaDTO;
@@ -102,18 +100,17 @@ public class ProcessamentoItemService {
         //     if (item.getImpostoSeletivo().getUnidade() == null) item.getImpostoSeletivo().setUnidade("UN");
         // }
         // FIM de bloco para a plataforma
+        
+        item.ajustarNcm(tipoDfe);
 
         var componentes = item.getGComponentesBC();
-        BigDecimal baseCalculo = item.getBaseCalculo();
 
         if (componentes != null && componentes.possuiComponentes()) {
             validarBaseCalculoComComponentes(operacao, item, componentes);
-            baseCalculo = item.getBaseCalculo();
         }
 
         if (componentes == null || !componentes.possuiComponentes()) {
             validarBaseCalculoLegado(item);
-            baseCalculo = item.getBaseCalculo();
         }
 
         validarNcmNbs(item.getNcm(), item.getNbs(), data);
@@ -142,7 +139,7 @@ public class ProcessamentoItemService {
         return calculoTributoService.calcular(operacaoModel);
     }
 
-    private TratamentoClassificacaoModel obterTratamentoClassificacao(ItemOperacaoInput item, LocalDate data,
+	private TratamentoClassificacaoModel obterTratamentoClassificacao(ItemOperacaoInput item, LocalDate data,
             TipoDfe tipoDfe) {
 
         ClassificacaoTributariaDTO classificacaoTributariaCbsIbs = null;
@@ -222,14 +219,22 @@ public class ProcessamentoItemService {
             }
         }
 
+        if (item.getImpostoSeletivo() != null) {
+            situacaoTributariaService.validarCst(item.getImpostoSeletivo().getCst(), 1L, data);
+            classificacaoTributariaImpostoSeletivo = classificacaoTributariaService
+                    .buscarClassificacaoTributariaImpostoSeletivo(item.getImpostoSeletivo().getCClassTrib(), data);
+            validarClassificacaoTributariaImpostoSeletivo(classificacaoTributariaImpostoSeletivo,
+                    item.getImpostoSeletivo().getCst());
+        }
+
         AliquotaImpostoSeletivoModel aliquotaImpostoSeletivo = analisarAliquotaImpostoSeletivo(item, data);
 
         if (tipoDfe != null && !SiglasDFeEnum.impostoSeletivoAplicavel(tipoDfe.getSigla())
                 && aliquotaImpostoSeletivo != null) {
             // O NCM/NBS exige Imposto Seletivo, mas o tipo de documento não está
             // na whitelist de documentos que admitem IS (hoje NF-e e NFC-e).
-            // Grupo impostoSeletivo informado sem exigência segue sendo ignorado,
-            // como no fluxo sem tpDoc.
+            // Grupo impostoSeletivo informado sem exigência não participa do
+            // cálculo, embora seu CST e sua classificação sejam validados.
             throw new ImpostoSeletivoNaoAdmitidoTipoDfeException(tipoDfe.getTipo(),
                     StringUtils.isNotBlank(ncm) ? "NCM" : "NBS",
                     StringUtils.isNotBlank(ncm) ? ncm : nbs);
@@ -259,11 +264,6 @@ public class ProcessamentoItemService {
                         StringUtils.isNotBlank(ncm) ? ncm : nbs, data);
             }
             validarQuantidadeEUnidade(item, aliquotaImpostoSeletivo);
-            // Validar CST do Imposto Seletivo
-            situacaoTributariaService.validarCst(item.getImpostoSeletivo().getCst(), 1L, data);
-            classificacaoTributariaImpostoSeletivo = classificacaoTributariaService
-                    .buscarClassificacaoTributariaImpostoSeletivo(item.getImpostoSeletivo().getCClassTrib(), data);
-            validarClassificacaoTributariaImpostoSeletivo(classificacaoTributariaImpostoSeletivo, item.getImpostoSeletivo().getCst());
             tratamentoClassificacaoImpostoSeletivo = tratamentoClassificacaoService
                     .buscarTratamentoClassificacao(classificacaoTributariaImpostoSeletivo.id(), data);
         } else if (aliquotaImpostoSeletivo == null && item.getImpostoSeletivo() != null) {
@@ -353,7 +353,7 @@ public class ProcessamentoItemService {
                     "A base de cálculo do Imposto Seletivo calculada a partir dos componentes é negativa");
             }
             BigDecimal baseDeclarada = impostoSeletivo.getBaseCalculo();
-            if (baseDeclarada != null && baseDeclarada.compareTo(ArredondamentoUtils.arredondarInterno(bcCalculada)) != 0) {
+            if (baseDeclarada != null && baseDeclarada.compareTo(bcCalculada) != 0) {
                 throw new BaseCalculoComponentesInconsistenteException(baseDeclarada, bcCalculada);
             }
             if (baseDeclarada == null) {
@@ -368,7 +368,7 @@ public class ProcessamentoItemService {
                 "A base de cálculo calculada a partir dos componentes é negativa");
         }
         BigDecimal baseDeclarada = item.getBaseCalculo();
-        if (baseDeclarada != null && baseDeclarada.compareTo(ArredondamentoUtils.arredondarInterno(bcCalculada)) != 0) {
+        if (baseDeclarada != null && baseDeclarada.compareTo(bcCalculada) != 0) {
             throw new BaseCalculoComponentesInconsistenteException(baseDeclarada, bcCalculada);
         }
         if (baseDeclarada == null) {
@@ -410,8 +410,7 @@ public class ProcessamentoItemService {
         final BigDecimal impostoInformado = impostoSeletivo.getImpostoInformado();
 
         if (baseCalculo == null) {
-            item.setBaseCalculo(ArredondamentoUtils.arredondarInterno(
-                    baseCalculoImpostoSeletivo.add(impostoSeletivo.getValorImpostoSeletivoInformado())));
+            item.setBaseCalculo(baseCalculoImpostoSeletivo.add(impostoSeletivo.getValorImpostoSeletivoInformado()));
             return;
         }
 

@@ -19,7 +19,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 
 import br.gov.serpro.rtc.api.model.input.AliquotasNominaisImpostoSeletivo;
 import br.gov.serpro.rtc.api.model.input.AliquotasNominaisInput;
@@ -31,6 +31,9 @@ import br.gov.serpro.rtc.domain.service.exception.AliquotaImpostoSeletivoNaoInfo
 import br.gov.serpro.rtc.domain.service.exception.AliquotasNominaisInformadasIndevidamenteException;
 import br.gov.serpro.rtc.domain.service.exception.AliquotasNominaisNaoInformadasException;
 import br.gov.serpro.rtc.util.CalculoTestSupport;
+import br.gov.serpro.rtc.domain.service.exception.ClassificacaoTributariaNaoEncontradaException;
+import br.gov.serpro.rtc.domain.service.exception.ClassificacaoTributariaNaoVinculadaSituacaoTributariaException;
+import br.gov.serpro.rtc.domain.service.exception.SituacaoTributariaNaoEncontradaException;
 
 /**
  * Validações das alíquotas nominais por ano do fato gerador:
@@ -124,9 +127,19 @@ class Teste_validacao_AliquotasNominaisPorAnoFatoGerador {
         // resolvendo as alíquotas vigentes em lei.
         mudarParaFatoGerador2026();
         item().setAliquotasNominais(null);
-        informarGrupoImpostoSeletivo();
+        item().setImpostoSeletivo(null);
 
         assertThatCode(() -> calculoTestSupport.regimeGeral(objectMapper.writeValueAsString(operacao))).doesNotThrowAnyException();
+    }
+
+    @Test
+    void deveValidarCstDoGrupoImpostoSeletivoEm2026AntesDaBuscaDeAliquota() {
+        mudarParaFatoGerador2026();
+        item().setAliquotasNominais(null);
+        informarGrupoImpostoSeletivo();
+
+        assertThatThrownBy(() -> calculadoraService.calcularTributos(operacao))
+                .isExactlyInstanceOf(SituacaoTributariaNaoEncontradaException.class);
     }
 
     @Test
@@ -154,6 +167,33 @@ class Teste_validacao_AliquotasNominaisPorAnoFatoGerador {
 
         assertThatThrownBy(() -> calculadoraService.calcularTributos(operacao))
                 .isExactlyInstanceOf(AliquotaImpostoSeletivoNaoInformadaException.class);
+    }
+
+    @Test
+    void deveValidarCstImpostoSeletivoAntesDaAusenciaDeAliquotaEm2027() {
+        informarGrupoImpostoSeletivo();
+        item().getImpostoSeletivo().setCst("999");
+
+        assertThatThrownBy(() -> calculadoraService.calcularTributos(operacao))
+                .isExactlyInstanceOf(SituacaoTributariaNaoEncontradaException.class);
+    }
+
+    @Test
+    void deveValidarClassificacaoImpostoSeletivoAntesDaAusenciaDeAliquotaEm2027() {
+        informarGrupoImpostoSeletivo();
+        item().getImpostoSeletivo().setCClassTrib("999999");
+
+        assertThatThrownBy(() -> calculadoraService.calcularTributos(operacao))
+                .isExactlyInstanceOf(ClassificacaoTributariaNaoEncontradaException.class);
+    }
+
+    @Test
+    void deveValidarVinculoCstDaClassificacaoIsAntesDaAusenciaDeAliquotaEm2027() {
+        informarGrupoImpostoSeletivo();
+        item().getImpostoSeletivo().setCClassTrib("100001");
+
+        assertThatThrownBy(() -> calculadoraService.calcularTributos(operacao))
+                .isExactlyInstanceOf(ClassificacaoTributariaNaoVinculadaSituacaoTributariaException.class);
     }
 
     @Test

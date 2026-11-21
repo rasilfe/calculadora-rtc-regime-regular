@@ -8,9 +8,9 @@ import java.time.LocalDate;
 
 import org.springframework.stereotype.Component;
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonDeserializer;
+import tools.jackson.core.JsonParser;
+import tools.jackson.databind.DeserializationContext;
+import tools.jackson.databind.ValueDeserializer;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -20,12 +20,12 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Component
-public final class LocalDateCustomDeserializer extends JsonDeserializer<LocalDate> {
+public final class LocalDateCustomDeserializer extends ValueDeserializer<LocalDate> {
     private static final String DATE_PATTERN = "\\d{4}-\\d{2}-\\d{2}";
     private static final String FORMAT = "yyyy-MM-dd";
     private static final String VALID_EXAMPLE = "2026-01-05";
     
-    private static final JsonDeserializer<LocalDate> INSTANCE =     
+    private static final ValueDeserializer<LocalDate> INSTANCE =     
             new GenericCustomDeserializer<>(
                     DATE_PATTERN,
                     FORMAT,
@@ -35,12 +35,12 @@ public final class LocalDateCustomDeserializer extends JsonDeserializer<LocalDat
                 );
     
     @Override
-    public LocalDate deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+    public LocalDate deserialize(JsonParser p, DeserializationContext ctxt) {
         return INSTANCE.deserialize(p, ctxt);
     }
     
     @Override
-    public JsonDeserializer<?> getDelegatee() {
+    public ValueDeserializer<?> getDelegatee() {
         return INSTANCE;
     }
 

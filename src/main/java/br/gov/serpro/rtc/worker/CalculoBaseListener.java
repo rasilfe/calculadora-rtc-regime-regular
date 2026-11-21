@@ -8,8 +8,9 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.stereotype.Component;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 
 import br.gov.serpro.rtc.worker.empresa.IdentificacaoEmpresa;
@@ -112,7 +113,7 @@ public class CalculoBaseListener {
                 return null;
             }
             final JsonNode campoTipo = envelope.get("tipo");
-            final String tipoInformado = campoTipo == null || campoTipo.isNull() ? null : campoTipo.asText();
+            final String tipoInformado = campoTipo == null || campoTipo.isNull() ? null : campoTipo.asString();
             final var tipo = TipoBaseCalculo.doEnvelope(tipoInformado);
             if (tipo.isEmpty()) {
                 log.error("Base de cálculo com tipo '{}' desconhecido (messageId={}); enviando para a DLQ",
@@ -128,7 +129,7 @@ public class CalculoBaseListener {
                 return null;
             }
             return pedido;
-        } catch (IOException e) {
+        } catch (JacksonException e) {
             log.error("Base de cálculo ilegível (messageId={}); enviando para a DLQ: {}", messageId, e.getMessage());
             return null;
         }

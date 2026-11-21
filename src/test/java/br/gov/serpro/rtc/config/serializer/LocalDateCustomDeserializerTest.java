@@ -11,8 +11,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.databind.DeserializationContext;
+import tools.jackson.core.JsonParser;
+import tools.jackson.databind.DeserializationContext;
 
 class LocalDateCustomDeserializerTest {
 

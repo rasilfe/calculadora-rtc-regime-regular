@@ -10,16 +10,12 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import br.gov.serpro.rtc.api.model.input.basecalculo.ComponentesBaseCalculoInput;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 class ComponentesBaseCalculoInputTest {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
-
-    @BeforeAll
-    static void setUp() {
-        MAPPER.findAndRegisterModules();
-    }
+    private static final ObjectMapper MAPPER = JsonMapper.builder().findAndAddModules().build();
 
     @Test
     void deveSerializarECarregarPayloadCenario1_JSON() throws Exception {

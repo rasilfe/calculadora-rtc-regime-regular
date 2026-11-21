@@ -13,8 +13,8 @@ package br.gov.serpro.rtc.domain.model.enumeration;
  * - NCM: Apenas NCM é aplicável
  * - NBS: Apenas NBS é aplicável
  * - MISTO: Ambas NCM e NBS são aplicáveis
- * - EXCECAO_NCM: Exceção para NFe/NFCe (ex: cClassTrib 200038)
- * - EXCECAO_NBS: Exceção para NFSe (ex: cClassTrib 200038)
+ * - EXCECAO_NCM: Exceção para NFe/NFCe (ex: cClassTrib 200038 e 515001)
+ * - EXCECAO_NBS: Exceção para NFSe (ex: cClassTrib 200038 e 515001)
  */
 public enum NomenclaturaResultEnum {
     SEM("SEM"),

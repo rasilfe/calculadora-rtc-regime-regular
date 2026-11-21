@@ -6,6 +6,7 @@ import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import lombok.extern.jackson.Jacksonized;
 
 import br.gov.serpro.rtc.api.model.SerializationVisibility;
 import lombok.Builder;
@@ -21,10 +22,11 @@ import lombok.Setter;
 @Getter
 @Setter
 @Builder
+@Jacksonized
 @JsonInclude(NON_NULL)
 @JsonPropertyOrder({ "oper", "objetos", "total" })
 public final class ROCDomain implements SerializationVisibility {
-    
+
     private OperacaoConsumoDomain oper;
     private List<ObjetoDomain> objetos;
     private ValoresTotaisDomain total;
